@@ -26,7 +26,7 @@ st.markdown("""
     /* 1. Fundo Escuro e Texto Claro Global */
     .stApp {
         background-color: #131314;
-        color: #f0f0f0 !important; /* Texto base branco */
+        color: #f0f0f0 !important;
     }
     
     /* 2. Forçar elementos de texto para branco/claro */
@@ -34,18 +34,18 @@ st.markdown("""
         color: #f0f0f0 !important;
     }
     
-    /* 3. Títulos em Azul Claro (destaque) */
+    /* 3. Títulos em Azul Claro */
     h1, h2, h3 {
         color: #479bd8 !important;
     }
 
-    /* 4. Labels de Inputs (garantir leitura) */
+    /* 4. Labels de Inputs */
     .stTextInput > label, .stNumberInput > label, .stSelectbox > label, .stRadio > label, .stTextArea > label {
         color: #f0f0f0 !important;
         font-weight: bold;
     }
     
-    /* 5. Inputs: Fundo Branco com Texto Preto (Contraste) */
+    /* 5. Inputs: Fundo Branco com Texto Preto */
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
         background-color: #ffffff !important;
         color: #000000 !important;
@@ -53,7 +53,7 @@ st.markdown("""
         border: 1px solid #479bd8;
     }
 
-    /* 6. Botões Estilizados */
+    /* 6. Botões */
     .stButton>button {
         background-color: #0054a6;
         color: white !important;
@@ -69,7 +69,7 @@ st.markdown("""
         color: white !important;
     }
 
-    /* 7. Alertas Personalizados */
+    /* 7. Alertas */
     .alert-box-red {
         background-color: #ffcccc; 
         border: 2px solid #990000; 
@@ -103,9 +103,17 @@ def carregar_usuarios():
     except: return None
 
 def carregar_sku():
-    if not os.path.exists(ARQUIVO_SKU): return pd.DataFrame()
-    try: return pd.read_csv(ARQUIVO_SKU, sep=';', encoding='latin1', dtype=str)
-    except: return pd.DataFrame()
+    # Verifica se arquivo existe
+    if not os.path.exists(ARQUIVO_SKU): 
+        return None # Retorna None para sabermos que não existe
+    try: 
+        # Tenta ler com ponto e vírgula
+        df = pd.read_csv(ARQUIVO_SKU, sep=';', encoding='latin1', dtype=str)
+        # Se só tiver 1 coluna, talvez seja separado por vírgula
+        if df.shape[1] < 2:
+            df = pd.read_csv(ARQUIVO_SKU, sep=',', encoding='latin1', dtype=str)
+        return df
+    except: return pd.DataFrame() # Retorna vazio se der erro de leitura
 
 def carregar_historico_temp():
     if not os.path.exists(ARQUIVO_DADOS_TEMP):
@@ -188,16 +196,34 @@ def tela_nao_conformidade():
     df_sku = carregar_sku()
     codigo_input = st.text_input("Código do SKU:")
     material_nome = ""
+    aviso_sku = ""
     
-    if codigo_input and not df_sku.empty:
+    # Lógica de busca do SKU
+    if df_sku is None:
+        aviso_sku = "⚠️ Arquivo 'sku.csv' não encontrado no sistema."
+    elif df_sku.empty:
+        aviso_sku = "⚠️ Arquivo 'sku.csv' está vazio ou ilegível."
+    elif codigo_input:
         try:
+            # Pega a primeira coluna como código e a segunda como descrição
             col_cod = df_sku.columns[0]
             res = df_sku[df_sku[col_cod].astype(str).str.strip() == codigo_input.strip()]
-            if not res.empty: material_nome = str(res.iloc[0].values[1])
-            else: material_nome = "SKU não cadastrado (pode prosseguir)"
-        except: pass
+            
+            if not res.empty:
+                # Tenta pegar a segunda coluna
+                if len(res.columns) > 1:
+                    material_nome = str(res.iloc[0].values[1])
+                else:
+                    material_nome = "Descrição não encontrada (CSV só tem 1 coluna)"
+            else:
+                material_nome = "SKU não cadastrado"
+        except Exception as e:
+            aviso_sku = f"Erro ao ler SKU: {e}"
     
     st.text_input("Descrição do Material:", value=material_nome, disabled=True)
+    if aviso_sku:
+        st.caption(aviso_sku)
+
     st.markdown("---")
     
     with st.form("form_nc"):
@@ -219,8 +245,6 @@ def tela_nao_conformidade():
         
         chk_emb = c2.checkbox("Embalagem Avariada")
         chk_pal_q = c2.checkbox("Palete Quebrado")
-        
-        # --- CORREÇÃO DA DUPLICIDADE E VARIÁVEL ---
         chk_pal_d = c2.checkbox("Palete Desalinhado")
         chk_vazamento = c2.checkbox("Vazamento")
         
