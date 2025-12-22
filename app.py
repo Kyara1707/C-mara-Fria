@@ -62,7 +62,7 @@ st.markdown("""
         transition: 0.3s;
     }
     .stButton>button:hover {
-        background-color: #003d7a;
+        background-color: #000000 ;
         color: white !important;
     }
     
@@ -312,6 +312,7 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
+
 
 
 
