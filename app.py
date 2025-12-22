@@ -47,7 +47,7 @@ st.markdown("""
 
     /* Títulos em Azul Escuro */
     h1, h2, h3, h4, h5, h6 {
-        color: #0054a6 !important;
+        color: #479bd8 !important;
     }
 
     /* Botões */
@@ -308,5 +308,6 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
+
 
 
