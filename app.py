@@ -15,7 +15,7 @@ st.set_page_config(
 ARQUIVO_USUARIOS = "users.csv"
 ARQUIVO_DADOS_TEMP = "dados_temperatura.csv"
 ARQUIVO_DADOS_NC = "dados_nao_conformidade.csv"
-ARQUIVO_SKU = "sku(1).csv"
+ARQUIVO_SKU = "sku (1).csv"
 
 LIE = 2.0  # Limite Inferior Temperatura
 LSE = 7.0  # Limite Superior Temperatura
@@ -332,3 +332,4 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
+
