@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
+import time
 
 # --- CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(
@@ -15,7 +16,7 @@ st.set_page_config(
 ARQUIVO_USUARIOS = "users.csv"
 ARQUIVO_DADOS_TEMP = "dados_temperatura.csv"
 ARQUIVO_DADOS_NC = "dados_nao_conformidade.csv"
-ARQUIVO_SKU = "sku (1).csv"
+ARQUIVO_SKU = "sku.csv"
 
 LIE = 2.0  # Limite Inferior Temperatura
 LSE = 7.0  # Limite Superior Temperatura
@@ -23,91 +24,39 @@ LSE = 7.0  # Limite Superior Temperatura
 # --- ESTILO CSS ---
 st.markdown("""
     <style>
-    /* 1. Fundo Escuro e Texto Claro Global */
-    .stApp {
-        background-color: #131314;
-        color: #f0f0f0 !important;
-    }
-    
-    /* 2. Forçar elementos de texto para branco/claro */
-    p, label, span, div, li, h1, h2, h3, h4, h5, h6 {
-        color: #f0f0f0 !important;
-    }
-    
-    /* 3. Títulos em Azul Claro */
-    h1, h2, h3 {
-        color: #479bd8 !important;
-    }
-
-    /* 4. Labels de Inputs */
+    .stApp { background-color: #131314; color: #f0f0f0 !important; }
+    p, label, span, div, li, h1, h2, h3, h4, h5, h6 { color: #f0f0f0 !important; }
+    h1, h2, h3 { color: #479bd8 !important; }
     .stTextInput > label, .stNumberInput > label, .stSelectbox > label, .stRadio > label, .stTextArea > label, .stFileUploader > label {
-        color: #f0f0f0 !important;
-        font-weight: bold;
+        color: #f0f0f0 !important; font-weight: bold;
     }
-    
-    /* 5. Inputs: Fundo Branco com Texto Preto */
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        border-radius: 10px;
-        border: 1px solid #479bd8;
+        background-color: #ffffff !important; color: #000000 !important;
+        border-radius: 10px; border: 1px solid #479bd8;
     }
-
-    /* 6. Botões */
     .stButton>button {
-        background-color: #0054a6;
-        color: white !important;
-        border-radius: 20px;
-        border: none;
-        padding: 10px 24px;
-        font-weight: bold;
-        width: 100%;
-        transition: 0.3s;
+        background-color: #0054a6; color: white !important;
+        border-radius: 20px; border: none; padding: 10px 24px;
+        font-weight: bold; width: 100%; transition: 0.3s;
     }
-    .stButton>button:hover {
-        background-color: #479bd8;
-        color: white !important;
-    }
-
-    /* 7. Alertas */
+    .stButton>button:hover { background-color: #479bd8; }
     .alert-box-red {
-        background-color: #ffcccc; 
-        border: 2px solid #990000; 
-        border-radius: 15px; 
-        padding: 20px;
-        text-align: center;
-        margin-top: 15px;
+        background-color: #ffcccc; border: 2px solid #990000;
+        border-radius: 15px; padding: 20px; text-align: center; margin-top: 15px;
     }
     .alert-box-red p, .alert-box-red div { color: #990000 !important; font-weight: bold; }
-
     .alert-box-green {
-        background-color: #ccffcc; 
-        border: 2px solid #006600; 
-        border-radius: 15px; 
-        padding: 20px;
-        text-align: center;
-        margin-top: 15px;
+        background-color: #ccffcc; border: 2px solid #006600;
+        border-radius: 15px; padding: 20px; text-align: center; margin-top: 15px;
     }
     .alert-box-green p, .alert-box-green div { color: #006600 !important; font-weight: bold; }
-    
-    /* 8. Tabs Customizadas */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #1f1f1f;
-        border-radius: 4px;
-        color: #f0f0f0;
-        padding: 10px 20px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #479bd8 !important;
-        color: white !important;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { background-color: #1f1f1f; border-radius: 4px; color: #f0f0f0; padding: 10px 20px; }
+    .stTabs [aria-selected="true"] { background-color: #479bd8 !important; color: white !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE DADOS (CORRIGIDAS) ---
+# --- FUNÇÕES DE DADOS ---
 
 def carregar_usuarios():
     if not os.path.exists(ARQUIVO_USUARIOS): return None
@@ -131,27 +80,20 @@ def carregar_historico_temp():
         return pd.DataFrame(columns=["Usuario", "Cargo", "Data", "Horario", "Temperatura", "Status"])
     try:
         return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";")
-    except pd.errors.ParserError:
-        # Tenta ler ignorando linhas ruins se o arquivo estiver corrompido
-        return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";", on_bad_lines='skip', engine='python')
     except:
-        return pd.DataFrame(columns=["Usuario", "Cargo", "Data", "Horario", "Temperatura", "Status"])
+        return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";", on_bad_lines='skip', engine='python')
 
 def carregar_historico_nc():
     if not os.path.exists(ARQUIVO_DADOS_NC):
         return pd.DataFrame()
-    
     try:
-        # Tenta ler normal
         return pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
-    except pd.errors.ParserError:
-        # Se falhar (por mistura de colunas antigas/novas), lê com engine python e pula erros
+    except:
+        # Se der erro, tenta ler ignorando linhas ruins
         try:
             return pd.read_csv(ARQUIVO_DADOS_NC, sep=";", on_bad_lines='skip', engine='python')
         except:
             return pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
 
 def salvar_temp(usuario, cargo, temp, status):
     agora = datetime.now()
@@ -159,19 +101,40 @@ def salvar_temp(usuario, cargo, temp, status):
         "Usuario": usuario, "Cargo": cargo, "Data": agora.strftime("%d/%m/%Y"),
         "Horario": agora.strftime("%H:%M:%S"), "Temperatura": temp, "Status": status
     }])
-    try: nova_linha.to_csv(ARQUIVO_DADOS_TEMP, mode='a', header=not os.path.exists(ARQUIVO_DADOS_TEMP), index=False, sep=";")
+    try: 
+        # Modo 'a' (append) funciona bem aqui pois a estrutura é fixa
+        nova_linha.to_csv(ARQUIVO_DADOS_TEMP, mode='a', header=not os.path.exists(ARQUIVO_DADOS_TEMP), index=False, sep=";")
     except PermissionError: st.error("Erro: Feche o arquivo Excel!")
 
 def salvar_nc(dados_dict):
     agora = datetime.now()
     dados_dict['Data'] = agora.strftime("%d/%m/%Y")
     dados_dict['Horario'] = agora.strftime("%H:%M:%S")
-    df_new = pd.DataFrame([dados_dict])
+    
+    df_novo = pd.DataFrame([dados_dict])
+    
+    # --- CORREÇÃO DE SALVAMENTO PARA EVITAR ERRO DE COLUNAS ---
     try:
-        df_new.to_csv(ARQUIVO_DADOS_NC, mode='a', header=not os.path.exists(ARQUIVO_DADOS_NC), index=False, sep=";")
+        if os.path.exists(ARQUIVO_DADOS_NC):
+            # Lê o arquivo antigo
+            try:
+                df_antigo = pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
+            except:
+                df_antigo = pd.DataFrame() # Se estiver corrompido, cria novo
+            
+            # Junta o antigo com o novo (o Pandas ajusta as colunas automaticamente)
+            df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
+            df_final.to_csv(ARQUIVO_DADOS_NC, index=False, sep=";")
+        else:
+            # Se não existe, cria novo
+            df_novo.to_csv(ARQUIVO_DADOS_NC, index=False, sep=";")
+            
         return True
     except PermissionError:
         st.error("Erro: Feche o arquivo de Não Conformidade!")
+        return False
+    except Exception as e:
+        st.error(f"Erro ao salvar: {e}")
         return False
 
 # --- TELAS ---
@@ -217,7 +180,6 @@ def tela_cadastro_temp():
 def tela_nao_conformidade():
     st.markdown("## ⚠️ Gestão de Não Conformidade")
     
-    # Abas para separar Cadastro do Dashboard
     tab1, tab2 = st.tabs(["📝 Cadastrar NC", "📊 Dashboard & Relatórios"])
     
     # --- ABA 1: CADASTRO ---
@@ -287,7 +249,8 @@ def tela_nao_conformidade():
                     }
                     if salvar_nc(dados):
                         st.success("✅ Registrado com sucesso!")
-                        st.balloons()
+                        time.sleep(1) # Aguarda 1s para o usuário ver a mensagem
+                        st.rerun() # FORÇA A ATUALIZAÇÃO DA PÁGINA
                 else: st.warning("⚠️ Informe o Código do SKU.")
 
     # --- ABA 2: DASHBOARD ---
@@ -316,7 +279,8 @@ def tela_nao_conformidade():
             
             contagem_avarias = {}
             for col in cols_existentes:
-                qtd = df_nc[df_nc[col] == 'Sim'].shape[0]
+                # Converte para string e limpa espaços para garantir contagem correta
+                qtd = df_nc[df_nc[col].astype(str).str.strip() == 'Sim'].shape[0]
                 if qtd > 0:
                     contagem_avarias[col.replace('_', ' ')] = qtd
             
@@ -468,4 +432,3 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
-
