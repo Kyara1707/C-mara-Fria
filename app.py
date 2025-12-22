@@ -277,65 +277,67 @@ def tela_grafico_temp():
     uploaded_file = st.file_uploader("📂 Carregar CSV externo (Para gerar gráfico)", type=["csv"])
     
     df_final = pd.DataFrame()
-    origem_dados = "interno" # interno ou upload
+    origem_dados = "interno" # Flag para saber se é upload ou interno
 
-    # Lógica: Se tiver upload, usa o upload. Se não, usa o arquivo local.
     if uploaded_file is not None:
         try:
             # Tenta ler com separador ;
             df_upload = pd.read_csv(uploaded_file, sep=";")
             
-            # Mapeamento das colunas do CSV externo
-            col_data = "Hora de conclusão"
-            col_temp = "Temperatura da Câmara Fria:"
+            # Nomes das colunas esperadas no CSV enviado
+            col_data_csv = "Hora de conclusão"
+            col_temp_csv = "Temperatura da Câmara Fria:"
 
-            # Verifica se colunas existem
-            if col_data in df_upload.columns and col_temp in df_upload.columns:
-                # Converter temperatura (Ex: "5,4" -> 5.4 e "Em manutenção" -> NaN)
-                df_upload['Temperatura'] = df_upload[col_temp].astype(str).str.replace(',', '.')
+            if col_data_csv in df_upload.columns and col_temp_csv in df_upload.columns:
+                # 1. Tratamento da Temperatura
+                # Converte virgula para ponto e força conversão numerica (erros viram NaN)
+                df_upload['Temperatura'] = df_upload[col_temp_csv].astype(str).str.replace(',', '.')
                 df_upload['Temperatura'] = pd.to_numeric(df_upload['Temperatura'], errors='coerce')
                 
-                # Converter data/hora
-                # O pandas tenta inferir o formato automaticamente
-                df_upload['Datetime'] = pd.to_datetime(df_upload[col_data], dayfirst=False, errors='coerce')
+                # 2. Tratamento da Data
+                # Tenta converter a coluna de data
+                df_upload['Datetime'] = pd.to_datetime(df_upload[col_data_csv], errors='coerce')
 
-                # Filtrar apenas onde temos Data e Temperatura válidas
+                # 3. Limpeza
+                # Remove linhas onde Temperatura ou Data não puderam ser lidos
                 df_final = df_upload.dropna(subset=['Temperatura', 'Datetime'])
                 
                 origem_dados = "upload"
                 if df_final.empty:
-                    st.warning("O arquivo foi lido, mas não há dados válidos de temperatura (números) ou data.")
+                    st.warning("O arquivo foi lido, mas não foram encontrados dados válidos (verifique o formato de data e números).")
             else:
-                st.error(f"O CSV precisa ter as colunas: '{col_data}' e '{col_temp}'")
+                st.error(f"Erro: O CSV enviado precisa ter as colunas: '{col_data_csv}' e '{col_temp_csv}'")
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
 
     else:
-        # Carrega dados do sistema (manual)
+        # Lógica Original (Lê do histórico interno)
         df = carregar_historico_temp()
         if not df.empty:
             df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
             df_final = df.dropna(subset=['Datetime'])
 
-    # --- PLOTAGEM DO GRÁFICO ---
+    # --- GERAÇÃO DO GRÁFICO ---
+    
     if df_final.empty:
         st.info("Aguardando dados para gerar o gráfico.")
         return
 
-    # Filtro de data (opcional, aqui pego tudo ou últimos 7 dias se for manual)
+    # Filtra últimos 7 dias apenas se for dados internos (upload mostra tudo)
     if origem_dados == "interno":
         data_limite = datetime.now() - timedelta(days=7)
         df_plot = df_final[df_final['Datetime'] >= data_limite]
     else:
-        df_plot = df_final # Se for upload, mostra tudo que tem no arquivo
+        df_plot = df_final
 
     if df_plot.empty:
         st.warning("Sem dados recentes para exibir.")
         return
 
-    # Ordenar por data para o gráfico não ficar riscado
+    # Ordena por data para o gráfico não ficar riscado
     df_plot = df_plot.sort_values(by='Datetime')
 
+    # Configuração do Gráfico
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=df_plot['Datetime'], 
@@ -346,6 +348,7 @@ def tela_grafico_temp():
         marker=dict(size=8, color='white', line=dict(width=2, color='#479bd8'))
     ))
     
+    # Linhas de limite
     fig.add_hline(y=LSE, line_dash="dash", line_color="#ff4444", annotation_text=f"Max {LSE}ºC")
     fig.add_hline(y=LIE, line_dash="dash", line_color="#44ff44", annotation_text=f"Min {LIE}ºC")
     
@@ -361,18 +364,17 @@ def tela_grafico_temp():
     )
     st.plotly_chart(fig, use_container_width=True)
     
-    # Exibir tabela de dados brutos
-    with st.expander("Ver Tabela Detalhada"):
-        # Seleciona colunas para mostrar dependendo da origem
+    # Exibir Tabela de Dados
+    with st.expander("Ver Dados Detalhados"):
         if origem_dados == "upload":
-            cols_show = ['Datetime', 'Temperatura da Câmara Fria:', 'Nome', 'Conferente coletor:']
-            # Filtra apenas colunas que realmente existem no df
-            cols_existentes = [c for c in cols_show if c in df_plot.columns]
-            st.dataframe(df_plot[cols_existentes], use_container_width=True)
+            # Mostra colunas relevantes do CSV enviado
+            colunas_exibir = ['Datetime', 'Temperatura da Câmara Fria:', 'Nome', 'Conferente coletor:']
+            colunas_validas = [c for c in colunas_exibir if c in df_plot.columns]
+            st.dataframe(df_plot[colunas_validas], use_container_width=True)
         else:
             st.dataframe(df_plot[['Data', 'Horario', 'Usuario', 'Temperatura', 'Status']], use_container_width=True)
 
-    # Botão de download (apenas se for manual, pois upload o usuário já tem o arquivo)
+    # Download button (só faz sentido para dados internos, já que o upload o usuário já tem)
     if origem_dados == "interno":
         with open(ARQUIVO_DADOS_TEMP, "rb") as file:
             st.download_button(label="📥 Baixar Histórico (Excel)", data=file, file_name="relatorio_temperatura.csv", mime="text/csv")
