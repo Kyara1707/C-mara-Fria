@@ -31,18 +31,18 @@ st.markdown("""
     
     /* Forçar cor preta em textos comuns, parágrafos e labels */
     p, label, span, div, li {
-        color: #000000;
+        color: #f0f0f0;
     }
     
     /* Forçar cor preta específica nos labels dos inputs */
     .stTextInput > label, .stNumberInput > label, .stSelectbox > label, .stRadio > label, .stTextArea > label {
-        color: #000000 !important;
+        color: #f0f0f0 !important;
         font-weight: bold;
     }
     
     /* Forçar cor preta dentro das caixas de texto */
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
-        color: #000000 !important;
+        color: #f0f0f0 !important;
     }
 
     /* Títulos em Azul Escuro */
@@ -308,3 +308,4 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
+
