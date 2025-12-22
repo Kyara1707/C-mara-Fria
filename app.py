@@ -6,121 +6,164 @@ import os
 
 # --- CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(
-    page_title="Monitoramento Câmara Fria ❄️",
-    page_icon="❄️",
+    page_title="ColdSpec | Qualidade",
+    page_icon="🧊",
     layout="centered"
 )
 
 # --- ARQUIVOS E CONSTANTES ---
 ARQUIVO_USUARIOS = "users.csv"
-ARQUIVO_DADOS = "dados_temperatura.csv"
-LIE = 2.0  # Limite Inferior
-LSE = 7.0  # Limite Superior
+ARQUIVO_DADOS_TEMP = "dados_temperatura.csv"
+ARQUIVO_DADOS_NC = "dados_nao_conformidade.csv"
+ARQUIVO_SKU = "sku.csv"
 
-# --- ESTILO CSS ---
+LIE = 2.0  # Limite Inferior Temperatura
+LSE = 7.0  # Limite Superior Temperatura
+
+# --- ESTILO CSS (VISUAL) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #f4f6f9; color: #0e1117; }
+    /* Forçar fundo claro e texto escuro globalmente */
+    .stApp {
+        background-color: #f4f6f9;
+        color: #000000 !important;
+    }
+    
+    /* Forçar cor preta em textos comuns, parágrafos e labels */
+    p, label, span, div, li {
+        color: #000000;
+    }
+    
+    /* Forçar cor preta específica nos labels dos inputs */
+    .stTextInput > label, .stNumberInput > label, .stSelectbox > label, .stRadio > label, .stTextArea > label {
+        color: #000000 !important;
+        font-weight: bold;
+    }
+    
+    /* Forçar cor preta dentro das caixas de texto */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+        color: #000000 !important;
+    }
+
+    /* Títulos em Azul Escuro */
+    h1, h2, h3, h4, h5, h6 {
+        color: #0054a6 !important;
+    }
+
+    /* Botões */
     .stButton>button {
-        background-color: #0054a6; color: white; border-radius: 20px;
-        border: none; padding: 10px 24px; font-weight: bold; width: 100%;
+        background-color: #0054a6;
+        color: white !important;
+        border-radius: 20px;
+        border: none;
+        padding: 10px 24px;
+        font-weight: bold;
+        width: 100%;
         transition: 0.3s;
     }
-    .stButton>button:hover { background-color: #003d7a; }
-    .stTextInput>div>div>input, .stNumberInput>div>div>input {
-        border-radius: 15px; border: 1px solid #0054a6;
+    .stButton>button:hover {
+        background-color: #003d7a;
+        color: white !important;
     }
+    
+    /* Inputs arredondados */
+    .stTextInput>div>div>input, .stNumberInput>div>div>input {
+        border-radius: 15px; 
+        border: 1px solid #0054a6;
+        background-color: #ffffff;
+        color: #000000;
+    }
+
+    /* Alertas */
     .alert-box-red {
-        background-color: #ffcccc; color: #990000; padding: 20px;
+        background-color: #ffcccc; color: #990000 !important; padding: 20px;
         border-radius: 15px; border: 2px solid #990000; text-align: center;
         font-size: 20px; font-weight: bold; margin-top: 15px;
     }
     .alert-box-green {
-        background-color: #ccffcc; color: #006600; padding: 20px;
+        background-color: #ccffcc; color: #006600 !important; padding: 20px;
         border-radius: 15px; border: 2px solid #006600; text-align: center;
         font-size: 20px; font-weight: bold; margin-top: 15px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE DADOS (COM PROTEÇÃO) ---
+# --- FUNÇÕES DE DADOS ---
 
 def carregar_usuarios():
-    """Lê users.csv. Se não existir, avisa."""
     if not os.path.exists(ARQUIVO_USUARIOS):
         return None
-
     try:
-        # Lê o arquivo existente
         df = pd.read_csv(ARQUIVO_USUARIOS, sep=';', encoding='latin1', dtype=str)
         df.columns = df.columns.str.strip().str.lower()
         return df
-    except Exception as e:
-        st.error(f"O arquivo users.csv existe mas está corrompido: {e}")
-        return None
+    except: return None
 
-def carregar_historico():
-    if not os.path.exists(ARQUIVO_DADOS):
+def carregar_sku():
+    if not os.path.exists(ARQUIVO_SKU):
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(ARQUIVO_SKU, sep=';', encoding='latin1', dtype=str)
+        return df
+    except: return pd.DataFrame()
+
+def carregar_historico_temp():
+    if not os.path.exists(ARQUIVO_DADOS_TEMP):
         return pd.DataFrame(columns=["Usuario", "Cargo", "Data", "Horario", "Temperatura", "Status"])
-    return pd.read_csv(ARQUIVO_DADOS, sep=";")
+    return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";")
 
-def salvar_registro(usuario, cargo, temp, status):
+def salvar_temp(usuario, cargo, temp, status):
     agora = datetime.now()
     nova_linha = pd.DataFrame([{
-        "Usuario": usuario,
-        "Cargo": cargo,
-        "Data": agora.strftime("%d/%m/%Y"),
-        "Horario": agora.strftime("%H:%M:%S"),
-        "Temperatura": temp,
-        "Status": status
+        "Usuario": usuario, "Cargo": cargo, "Data": agora.strftime("%d/%m/%Y"),
+        "Horario": agora.strftime("%H:%M:%S"), "Temperatura": temp, "Status": status
     }])
+    try: nova_linha.to_csv(ARQUIVO_DADOS_TEMP, mode='a', header=not os.path.exists(ARQUIVO_DADOS_TEMP), index=False, sep=";")
+    except PermissionError: st.error("Erro: Feche o arquivo Excel!")
+
+def salvar_nc(dados_dict):
+    agora = datetime.now()
+    dados_dict['Data'] = agora.strftime("%d/%m/%Y")
+    dados_dict['Horario'] = agora.strftime("%H:%M:%S")
+    
+    df_new = pd.DataFrame([dados_dict])
     try:
-        nova_linha.to_csv(ARQUIVO_DADOS, mode='a', header=not os.path.exists(ARQUIVO_DADOS), index=False, sep=";")
+        df_new.to_csv(ARQUIVO_DADOS_NC, mode='a', header=not os.path.exists(ARQUIVO_DADOS_NC), index=False, sep=";")
+        return True
     except PermissionError:
-        st.error("Erro: Feche o arquivo Excel antes de salvar!")
+        st.error("Erro: Feche o arquivo de Não Conformidade!")
+        return False
 
 # --- TELAS ---
 
 def tela_login():
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center; color: #0054a6;'>Câmara Fria ❄️</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Controle de Qualidade</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🧊 ColdSpec</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: black;'>Monitoramento & Qualidade</p>", unsafe_allow_html=True)
     st.markdown("---")
     
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.info("Identifique-se para continuar")
+        st.info("Acesso Restrito")
         login_id = st.text_input("ID de Matrícula").strip()
         
         if st.button("ACESSAR"):
             df_users = carregar_usuarios()
-            
             if df_users is None or df_users.empty:
-                st.error("Erro: users.csv não encontrado na pasta.")
+                st.error("Erro: users.csv não encontrado.")
                 return 
 
             if 'id_login' in df_users.columns:
-                # Busca exata (remove espaços)
                 usuario = df_users[df_users['id_login'].str.strip() == login_id]
-                
                 if not usuario.empty:
                     st.session_state['usuario_nome'] = usuario.iloc[0]['nome']
                     st.session_state['usuario_cargo'] = usuario.iloc[0]['tipo']
                     st.rerun()
-                else:
-                    st.error("❌ Matrícula não encontrada.")
-            else:
-                st.error("Erro: O arquivo CSV não tem a coluna 'id_login'.")
+                else: st.error("❌ Matrícula não encontrada.")
+            else: st.error("Erro: CSV sem coluna id_login.")
 
-def tela_cadastro():
-    st.sidebar.markdown(f"### 👤 {st.session_state['usuario_nome']}")
-    st.sidebar.markdown(f"**Cargo:** {st.session_state['usuario_cargo']}")
-    
-    if st.sidebar.button("Sair / Logout"):
-        st.session_state.clear()
-        st.rerun()
-
-    st.markdown("## 📝 Registrar Temperatura")
+def tela_cadastro_temp():
+    st.markdown("## 🌡️ Monitoramento de Temperatura")
     st.markdown(f"**Faixa Permitida:** <span style='color:blue'>{LIE}ºC</span> a <span style='color:blue'>{LSE}ºC</span>", unsafe_allow_html=True)
     
     with st.container():
@@ -131,28 +174,92 @@ def tela_cadastro():
             status = ""
             if LIE <= temp_input <= LSE:
                 status = "OK"
-                salvar_registro(st.session_state['usuario_nome'], st.session_state['usuario_cargo'], temp_input, status)
+                salvar_temp(st.session_state['usuario_nome'], st.session_state['usuario_cargo'], temp_input, status)
                 st.markdown(f"""<div class="alert-box-green">✅ SUCESSO<br>Temperatura {temp_input}ºC registrada.</div>""", unsafe_allow_html=True)
                 st.balloons()
             else:
                 status = "ERRO"
-                salvar_registro(st.session_state['usuario_nome'], st.session_state['usuario_cargo'], temp_input, status)
+                salvar_temp(st.session_state['usuario_nome'], st.session_state['usuario_cargo'], temp_input, status)
                 st.markdown(f"""<div class="alert-box-red">🚨 ERRO: FORA DO LIMITE!<br>Temperatura: {temp_input}ºC<hr>⚠️ INFORMAR AO SUPERIOR</div>""", unsafe_allow_html=True)
 
-def tela_grafico():
-    st.markdown("## 📊 Controle Semanal")
-    df = carregar_historico()
+def tela_nao_conformidade():
+    st.markdown("## ⚠️ Registro de Não Conformidade")
+    
+    df_sku = carregar_sku()
+    codigo_input = st.text_input("Código do SKU:")
+    material_nome = ""
+    
+    if codigo_input and not df_sku.empty:
+        try:
+            col_cod = df_sku.columns[0]
+            res = df_sku[df_sku[col_cod].astype(str).str.strip() == codigo_input.strip()]
+            if not res.empty:
+                material_nome = str(res.iloc[0].values[1])
+            else:
+                material_nome = "SKU não cadastrado no arquivo (mas pode prosseguir)"
+        except: pass
+    
+    st.text_input("Descrição do Material:", value=material_nome, disabled=True)
+    st.markdown("---")
+    
+    with st.form("form_nc"):
+        st.markdown("### 📋 Check-list de Avaria")
+        
+        st.write("**Localização da Avaria:**")
+        local_avaria = st.radio("Selecione:", ["Topo", "Meio", "Base"], horizontal=True)
+        st.divider()
+        
+        st.write("**Tipo(s) de Não Conformidade:**")
+        c1, c2 = st.columns(2)
+        chk_quebra = c1.checkbox("Quebra de Garrafa")
+        chk_lata_am = c1.checkbox("Lata Amassada/Rasgada")
+        chk_filme = c1.checkbox("Filme Rasgado")
+        chk_sku = c1.checkbox("Falta de SKU")
+        
+        chk_emb = c2.checkbox("Embalagem Avariada")
+        chk_pal_q = c2.checkbox("Palete Quebrado")
+        chk_pal_d = c2.checkbox("Palete Desalinhado")
+        
+        st.divider()
+        obs = st.text_area("Observações / Detalhes:")
+        
+        if st.form_submit_button("REGISTRAR NÃO CONFORMIDADE"):
+            if codigo_input:
+                dados = {
+                    "Usuario": st.session_state['usuario_nome'],
+                    "Cargo": st.session_state['usuario_cargo'],
+                    "SKU": codigo_input,
+                    "Descricao_SKU": material_nome,
+                    "Local_Avaria": local_avaria,
+                    "Quebra_Garrafa": "Sim" if chk_quebra else "Não",
+                    "Lata_Amassada": "Sim" if chk_lata_am else "Não",
+                    "Filme_Rasgado": "Sim" if chk_filme else "Não",
+                    "Falta_SKU": "Sim" if chk_sku else "Não",
+                    "Emb_Avariada": "Sim" if chk_emb else "Não",
+                    "Palete_Quebrado": "Sim" if chk_pal_q else "Não",
+                    "Palete_Desalinhado": "Sim" if chk_pal_d else "Não",
+                    "Observacoes": obs
+                }
+                if salvar_nc(dados):
+                    st.success("✅ Não Conformidade registrada com sucesso!")
+                    st.balloons()
+            else:
+                st.warning("⚠️ Favor informar o Código do SKU.")
+
+def tela_grafico_temp():
+    st.markdown("## 📊 Controle de Temperatura (Semanal)")
+    df = carregar_historico_temp()
     
     if df.empty:
         st.info("Nenhum dado registrado ainda.")
         return
 
-    # Converte para datetime
+    # Criar coluna Datetime
     df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], format='%d/%m/%Y %H:%M:%S')
-    
-    # Filtra semana
     data_limite = datetime.now() - timedelta(days=7)
-    df_semanal = df[df['Datetime'] >= data_limite].sort_values(by='Datetime')
+    
+    # Filtrar últimos 7 dias
+    df_semanal = df[df['Datetime'] >= data_limite]
 
     if df_semanal.empty:
         st.warning("Sem dados nesta semana.")
@@ -160,36 +267,44 @@ def tela_grafico():
 
     # Gráfico
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df_semanal['Datetime'], 
-        y=df_semanal['Temperatura'], 
-        mode='lines+markers', 
-        name='Temperatura', 
-        line=dict(color='#0054a6', width=4), 
-        marker=dict(size=10, color='white', line=dict(width=2, color='#0054a6'))
-    ))
+    fig.add_trace(go.Scatter(x=df_semanal['Datetime'], y=df_semanal['Temperatura'], mode='lines+markers', name='Temperatura', line=dict(color='#0054a6', width=4), marker=dict(size=10, color='white', line=dict(width=2, color='#0054a6'))))
     fig.add_hline(y=LSE, line_dash="dash", line_color="red", annotation_text=f"Max {LSE}ºC")
     fig.add_hline(y=LIE, line_dash="dash", line_color="blue", annotation_text=f"Min {LIE}ºC")
-    fig.update_layout(title="Variação de Temperatura", xaxis_title="Data/Hora", yaxis_title="ºC", template="plotly_white", height=450)
-    
+    fig.update_layout(
+        title="Variação Térmica", xaxis_title="Data/Hora", yaxis_title="ºC",
+        template="plotly_white", height=450,
+        font=dict(color="black")
+    )
     st.plotly_chart(fig, use_container_width=True)
     
     # --- CORREÇÃO DO ERRO AQUI ---
-    with st.expander("Ver Histórico Detalhado"):
-        # Ordenamos PRIMEIRO pela data, DEPOIS selecionamos as colunas para exibir
-        tabela_exibicao = df_semanal.sort_values(by='Datetime', ascending=False)
+    with st.expander("Ver Histórico de Temperatura"):
+        # 1. Primeiro ordena usando a coluna Datetime
+        tabela_ordenada = df_semanal.sort_values(by='Datetime', ascending=False)
+        
+        # 2. Depois seleciona as colunas para exibir (sem Datetime, pois não queremos mostrar ela duplicada)
         st.dataframe(
-            tabela_exibicao[['Data', 'Horario', 'Usuario', 'Temperatura', 'Status']], 
+            tabela_ordenada[['Data', 'Horario', 'Usuario', 'Temperatura', 'Status']], 
             use_container_width=True
         )
 
-    with open(ARQUIVO_DADOS, "rb") as file:
-        st.download_button(label="📥 Baixar Relatório (Excel)", data=file, file_name="relatorio_camara_fria.csv", mime="text/csv")
+    with open(ARQUIVO_DADOS_TEMP, "rb") as file:
+        st.download_button(label="📥 Baixar Dados Temp (Excel)", data=file, file_name="relatorio_temperatura.csv", mime="text/csv")
 
 # --- NAVEGAÇÃO ---
 if 'usuario_nome' not in st.session_state:
     tela_login()
 else:
-    menu = st.radio("Navegação:", ["Cadastro", "Gráfico"], horizontal=True)
-    if menu == "Cadastro": tela_cadastro()
-    else: tela_grafico()
+    st.sidebar.markdown(f"## 👤 {st.session_state['usuario_nome']}")
+    st.sidebar.caption(f"{st.session_state['usuario_cargo']}")
+    st.sidebar.markdown("---")
+    
+    menu = st.sidebar.radio("Navegação:", ["🌡️ Temperatura", "⚠️ Não Conformidade", "📊 Gráfico Temp"], index=0)
+    
+    if st.sidebar.button("Sair"):
+        st.session_state.clear()
+        st.rerun()
+
+    if menu == "🌡️ Temperatura": tela_cadastro_temp()
+    elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
+    else: tela_grafico_temp()
