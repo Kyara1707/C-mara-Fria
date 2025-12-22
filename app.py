@@ -15,7 +15,7 @@ st.set_page_config(
 ARQUIVO_USUARIOS = "users.csv"
 ARQUIVO_DADOS_TEMP = "dados_temperatura.csv"
 ARQUIVO_DADOS_NC = "dados_nao_conformidade.csv"
-ARQUIVO_SKU = "sku (1).csv" # Recomendado renomear para sku.csv para evitar erros
+ARQUIVO_SKU = "sku.csv"
 
 LIE = 2.0  # Limite Inferior Temperatura
 LSE = 7.0  # Limite Superior Temperatura
@@ -23,32 +23,87 @@ LSE = 7.0  # Limite Superior Temperatura
 # --- ESTILO CSS ---
 st.markdown("""
     <style>
-    .stApp { background-color: #131314; color: #f0f0f0 !important; }
-    p, label, span, div, li, h1, h2, h3, h4, h5, h6 { color: #f0f0f0 !important; }
-    h1, h2, h3 { color: #479bd8 !important; }
+    /* 1. Fundo Escuro e Texto Claro Global */
+    .stApp {
+        background-color: #131314;
+        color: #f0f0f0 !important;
+    }
+    
+    /* 2. Forçar elementos de texto para branco/claro */
+    p, label, span, div, li, h1, h2, h3, h4, h5, h6 {
+        color: #f0f0f0 !important;
+    }
+    
+    /* 3. Títulos em Azul Claro */
+    h1, h2, h3 {
+        color: #479bd8 !important;
+    }
+
+    /* 4. Labels de Inputs */
     .stTextInput > label, .stNumberInput > label, .stSelectbox > label, .stRadio > label, .stTextArea > label, .stFileUploader > label {
-        color: #f0f0f0 !important; font-weight: bold;
+        color: #f0f0f0 !important;
+        font-weight: bold;
     }
+    
+    /* 5. Inputs: Fundo Branco com Texto Preto */
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
-        background-color: #ffffff !important; color: #000000 !important;
-        border-radius: 10px; border: 1px solid #479bd8;
+        background-color: #ffffff !important;
+        color: #000000 !important;
+        border-radius: 10px;
+        border: 1px solid #479bd8;
     }
+
+    /* 6. Botões */
     .stButton>button {
-        background-color: #0054a6; color: white !important;
-        border-radius: 20px; border: none; padding: 10px 24px;
-        font-weight: bold; width: 100%; transition: 0.3s;
+        background-color: #0054a6;
+        color: white !important;
+        border-radius: 20px;
+        border: none;
+        padding: 10px 24px;
+        font-weight: bold;
+        width: 100%;
+        transition: 0.3s;
     }
-    .stButton>button:hover { background-color: #479bd8; }
+    .stButton>button:hover {
+        background-color: #479bd8;
+        color: white !important;
+    }
+
+    /* 7. Alertas */
     .alert-box-red {
-        background-color: #ffcccc; border: 2px solid #990000;
-        border-radius: 15px; padding: 20px; text-align: center; margin-top: 15px;
+        background-color: #ffcccc; 
+        border: 2px solid #990000; 
+        border-radius: 15px; 
+        padding: 20px;
+        text-align: center;
+        margin-top: 15px;
     }
     .alert-box-red p, .alert-box-red div { color: #990000 !important; font-weight: bold; }
+
     .alert-box-green {
-        background-color: #ccffcc; border: 2px solid #006600;
-        border-radius: 15px; padding: 20px; text-align: center; margin-top: 15px;
+        background-color: #ccffcc; 
+        border: 2px solid #006600; 
+        border-radius: 15px; 
+        padding: 20px;
+        text-align: center;
+        margin-top: 15px;
     }
     .alert-box-green p, .alert-box-green div { color: #006600 !important; font-weight: bold; }
+    
+    /* 8. Tabs Customizadas */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #1f1f1f;
+        border-radius: 4px;
+        color: #f0f0f0;
+        padding: 10px 20px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #479bd8 !important;
+        color: white !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -75,6 +130,11 @@ def carregar_historico_temp():
     if not os.path.exists(ARQUIVO_DADOS_TEMP):
         return pd.DataFrame(columns=["Usuario", "Cargo", "Data", "Horario", "Temperatura", "Status"])
     return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";")
+
+def carregar_historico_nc():
+    if not os.path.exists(ARQUIVO_DADOS_NC):
+        return pd.DataFrame()
+    return pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
 
 def salvar_temp(usuario, cargo, temp, status):
     agora = datetime.now()
@@ -138,63 +198,173 @@ def tela_cadastro_temp():
                 st.markdown(f"""<div class="alert-box-red"><p>🚨 ERRO: FORA DO LIMITE!</p><p>Temperatura: {temp_input}ºC</p><hr><p>⚠️ INFORMAR AO SUPERIOR</p></div>""", unsafe_allow_html=True)
 
 def tela_nao_conformidade():
-    st.markdown("## ⚠️ Registro de Não Conformidade")
-    df_sku = carregar_sku()
-    codigo_input = st.text_input("Código do SKU:")
-    material_nome = ""
-    aviso_sku = ""
+    st.markdown("## ⚠️ Gestão de Não Conformidade")
     
-    if df_sku is None: aviso_sku = "⚠️ Arquivo 'sku.csv' não encontrado."
-    elif df_sku.empty: aviso_sku = "⚠️ Arquivo 'sku.csv' vazio."
-    elif codigo_input:
-        try:
-            col_cod = df_sku.columns[0]
-            res = df_sku[df_sku[col_cod].astype(str).str.strip() == codigo_input.strip()]
-            if not res.empty:
-                material_nome = str(res.iloc[0].values[1]) if len(res.columns) > 1 else "Descrição não encontrada"
-            else: material_nome = "SKU não cadastrado"
-        except Exception as e: aviso_sku = f"Erro ao ler SKU: {e}"
+    # Abas para separar Cadastro do Dashboard
+    tab1, tab2 = st.tabs(["📝 Cadastrar NC", "📊 Dashboard & Relatórios"])
     
-    st.text_input("Descrição do Material:", value=material_nome, disabled=True)
-    if aviso_sku: st.caption(aviso_sku)
-    st.markdown("---")
-    
-    with st.form("form_nc"):
-        st.markdown("### 📋 Check-list de Avaria")
-        arm_avaria = st.radio("Armazém:", ["Armazém A", "Armazém B", "Armazém C", "Armazém R", "Armazém M"], horizontal=True)
-        local_avaria = st.radio("Localização:", ["Topo", "Meio", "Base"], horizontal=True)
-        st.divider()
-        c1, c2 = st.columns(2)
-        chk_quebra = c1.checkbox("Quebra de Garrafa")
-        chk_lata_am = c1.checkbox("Lata Amassada/Rasgada")
-        chk_filme = c1.checkbox("Filme Rasgado")
-        chk_sku = c1.checkbox("Falta de SKU")
-        chk_emb = c2.checkbox("Embalagem Avariada")
-        chk_pal_q = c2.checkbox("Palete Quebrado")
-        chk_pal_d = c2.checkbox("Palete Desalinhado")
-        chk_vazamento = c2.checkbox("Vazamento")
-        st.divider()
-        obs = st.text_area("Observações / Detalhes:")
+    # --- ABA 1: CADASTRO ---
+    with tab1:
+        df_sku = carregar_sku()
+        codigo_input = st.text_input("Código do SKU:")
+        material_nome = ""
+        aviso_sku = ""
         
-        if st.form_submit_button("REGISTRAR NÃO CONFORMIDADE"):
-            if codigo_input:
-                dados = {
-                    "Usuario": st.session_state['usuario_nome'], "Cargo": st.session_state['usuario_cargo'],
-                    "SKU": codigo_input, "Descricao_SKU": material_nome, "Armazem": arm_avaria,
-                    "Local_Avaria": local_avaria, "Observacoes": obs,
-                    "Quebra_Garrafa": "Sim" if chk_quebra else "Não",
-                    "Lata_Amassada": "Sim" if chk_lata_am else "Não",
-                    "Filme_Rasgado": "Sim" if chk_filme else "Não",
-                    "Falta_SKU": "Sim" if chk_sku else "Não",
-                    "Emb_Avariada": "Sim" if chk_emb else "Não",
-                    "Palete_Quebrado": "Sim" if chk_pal_q else "Não",
-                    "Palete_Desalinhado": "Sim" if chk_pal_d else "Não",
-                    "Vazamento": "Sim" if chk_vazamento else "Não"
-                }
-                if salvar_nc(dados):
-                    st.success("✅ Registrado com sucesso!")
-                    st.balloons()
-            else: st.warning("⚠️ Informe o Código do SKU.")
+        if df_sku is None: aviso_sku = "⚠️ Arquivo 'sku.csv' não encontrado."
+        elif df_sku.empty: aviso_sku = "⚠️ Arquivo 'sku.csv' vazio."
+        elif codigo_input:
+            try:
+                col_cod = df_sku.columns[0]
+                res = df_sku[df_sku[col_cod].astype(str).str.strip() == codigo_input.strip()]
+                if not res.empty:
+                    material_nome = str(res.iloc[0].values[1]) if len(res.columns) > 1 else "Descrição não encontrada"
+                else: material_nome = "SKU não cadastrado"
+            except Exception as e: aviso_sku = f"Erro ao ler SKU: {e}"
+        
+        st.text_input("Descrição do Material:", value=material_nome, disabled=True)
+        if aviso_sku: st.caption(aviso_sku)
+        st.markdown("---")
+        
+        with st.form("form_nc"):
+            st.markdown("### 📋 Localização & Detalhes")
+            
+            # --- NOVO: CAMPO RUA ---
+            col_loc1, col_loc2 = st.columns(2)
+            with col_loc1:
+                arm_avaria = st.selectbox("Armazém:", ["Armazém A", "Armazém B", "Armazém C", "Armazém R", "Armazém M"])
+            with col_loc2:
+                rua_avaria = st.text_input("Rua / Corredor:", placeholder="Ex: 15B")
+
+            st.write("**Posição no Rack:**")
+            local_avaria = st.radio("Selecione:", ["Topo", "Meio", "Base"], horizontal=True)
+            
+            st.divider()
+            st.write("**Tipo(s) de Avaria:**")
+            c1, c2 = st.columns(2)
+            chk_quebra = c1.checkbox("Quebra de Garrafa")
+            chk_lata_am = c1.checkbox("Lata Amassada/Rasgada")
+            chk_filme = c1.checkbox("Filme Rasgado")
+            chk_sku = c1.checkbox("Falta de SKU")
+            chk_emb = c2.checkbox("Embalagem Avariada")
+            chk_pal_q = c2.checkbox("Palete Quebrado")
+            chk_pal_d = c2.checkbox("Palete Desalinhado")
+            chk_vazamento = c2.checkbox("Vazamento")
+            
+            st.divider()
+            obs = st.text_area("Observações / Detalhes:")
+            
+            if st.form_submit_button("REGISTRAR NÃO CONFORMIDADE"):
+                if codigo_input:
+                    dados = {
+                        "Usuario": st.session_state['usuario_nome'], "Cargo": st.session_state['usuario_cargo'],
+                        "SKU": codigo_input, "Descricao_SKU": material_nome, 
+                        "Armazem": arm_avaria, "Rua": rua_avaria, # Salva a Rua
+                        "Local_Avaria": local_avaria, "Observacoes": obs,
+                        "Quebra_Garrafa": "Sim" if chk_quebra else "Não",
+                        "Lata_Amassada": "Sim" if chk_lata_am else "Não",
+                        "Filme_Rasgado": "Sim" if chk_filme else "Não",
+                        "Falta_SKU": "Sim" if chk_sku else "Não",
+                        "Emb_Avariada": "Sim" if chk_emb else "Não",
+                        "Palete_Quebrado": "Sim" if chk_pal_q else "Não",
+                        "Palete_Desalinhado": "Sim" if chk_pal_d else "Não",
+                        "Vazamento": "Sim" if chk_vazamento else "Não"
+                    }
+                    if salvar_nc(dados):
+                        st.success("✅ Registrado com sucesso!")
+                        st.balloons()
+                else: st.warning("⚠️ Informe o Código do SKU.")
+
+    # --- ABA 2: DASHBOARD ---
+    with tab2:
+        df_nc = carregar_historico_nc()
+        
+        if df_nc.empty:
+            st.info("Nenhuma Não Conformidade registrada ainda.")
+        else:
+            # --- 1. DOWNLOAD ---
+            with open(ARQUIVO_DADOS_NC, "rb") as file:
+                st.download_button(
+                    label="📥 Baixar CSV de Avarias",
+                    data=file,
+                    file_name="relatorio_avarias.csv",
+                    mime="text/csv"
+                )
+            
+            st.markdown("---")
+            
+            # --- KPI ---
+            total_avarias = len(df_nc)
+            st.metric("Total de Ocorrências", total_avarias)
+            
+            # --- 2. GRÁFICO ROSQUINHA (Tipos de Avaria) ---
+            colunas_avarias = ["Quebra_Garrafa", "Lata_Amassada", "Filme_Rasgado", "Falta_SKU", 
+                               "Emb_Avariada", "Palete_Quebrado", "Palete_Desalinhado", "Vazamento"]
+            
+            # Verifica quais colunas existem no CSV (caso seja um CSV antigo sem todas as colunas)
+            cols_existentes = [c for c in colunas_avarias if c in df_nc.columns]
+            
+            # Conta quantos "Sim" existem em cada coluna
+            contagem_avarias = {}
+            for col in cols_existentes:
+                qtd = df_nc[df_nc[col] == 'Sim'].shape[0]
+                if qtd > 0:
+                    contagem_avarias[col.replace('_', ' ')] = qtd
+            
+            if contagem_avarias:
+                labels = list(contagem_avarias.keys())
+                values = list(contagem_avarias.values())
+
+                fig_donut = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.4)])
+                fig_donut.update_layout(
+                    title="Distribuição por Tipo de Avaria",
+                    template="plotly_dark",
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color="#f0f0f0")
+                )
+                st.plotly_chart(fig_donut, use_container_width=True)
+            else:
+                st.warning("Não há avarias do tipo marcado 'Sim' nos registros.")
+
+            # --- 3. GRÁFICOS LADO A LADO ---
+            c_graf1, c_graf2 = st.columns(2)
+            
+            with c_graf1:
+                # Armazéns com mais avarias
+                if 'Armazem' in df_nc.columns:
+                    counts_arm = df_nc['Armazem'].value_counts()
+                    fig_bar = go.Figure(go.Bar(
+                        x=counts_arm.values, 
+                        y=counts_arm.index, 
+                        orientation='h',
+                        marker=dict(color='#479bd8')
+                    ))
+                    fig_bar.update_layout(
+                        title="Ocorrências por Armazém",
+                        template="plotly_dark",
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color="#f0f0f0")
+                    )
+                    st.plotly_chart(fig_bar, use_container_width=True)
+
+            with c_graf2:
+                # Localização (Topo, Meio, Base)
+                if 'Local_Avaria' in df_nc.columns:
+                    counts_loc = df_nc['Local_Avaria'].value_counts()
+                    fig_loc = go.Figure(go.Bar(
+                        x=counts_loc.index, 
+                        y=counts_loc.values,
+                        marker=dict(color=['#ff4444', '#44ff44', '#ffff44']) # Cores diferentes
+                    ))
+                    fig_loc.update_layout(
+                        title="Ocorrências por Posição",
+                        template="plotly_dark",
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color="#f0f0f0")
+                    )
+                    st.plotly_chart(fig_loc, use_container_width=True)
 
 def tela_grafico_temp():
     st.markdown("## 📊 Controle de Temperatura")
@@ -208,29 +378,20 @@ def tela_grafico_temp():
 
     if uploaded_file is not None:
         try:
-            # TENTATIVA 1: Ler como UTF-8 (Padrão)
             try:
                 df_upload = pd.read_csv(uploaded_file, sep=";")
             except UnicodeDecodeError:
-                # TENTATIVA 2: Ler como Latin-1 (Correção do erro 0xed)
                 uploaded_file.seek(0)
                 df_upload = pd.read_csv(uploaded_file, sep=";", encoding="latin1")
             
-            # Colunas esperadas
             col_data_csv = "Hora de conclusão"
             col_temp_csv = "Temperatura da Câmara Fria:"
 
             if col_data_csv in df_upload.columns and col_temp_csv in df_upload.columns:
-                # 1. Tratamento da Temperatura
                 df_upload['Temperatura'] = df_upload[col_temp_csv].astype(str).str.replace(',', '.')
                 df_upload['Temperatura'] = pd.to_numeric(df_upload['Temperatura'], errors='coerce')
-                
-                # 2. Tratamento da Data
                 df_upload['Datetime'] = pd.to_datetime(df_upload[col_data_csv], dayfirst=True, errors='coerce')
-
-                # 3. Limpeza
                 df_final = df_upload.dropna(subset=['Temperatura', 'Datetime'])
-                
                 origem_dados = "upload"
                 if df_final.empty:
                     st.warning("Arquivo lido, mas sem dados válidos (verifique formatos).")
@@ -240,7 +401,6 @@ def tela_grafico_temp():
             st.error(f"Erro ao processar arquivo: {e}")
 
     else:
-        # Lógica Original (Manual)
         df = carregar_historico_temp()
         if not df.empty:
             df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
@@ -251,7 +411,6 @@ def tela_grafico_temp():
         st.info("Aguardando dados para gerar o gráfico.")
         return
 
-    # Filtro de data apenas para dados manuais (Upload mostra tudo)
     if origem_dados == "interno":
         data_limite = datetime.now() - timedelta(days=7)
         df_plot = df_final[df_final['Datetime'] >= data_limite]
@@ -311,4 +470,3 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
-
