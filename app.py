@@ -25,7 +25,7 @@ st.markdown("""
     <style>
     /* Forçar fundo claro e texto escuro globalmente */
     .stApp {
-        background-color: #f4f6f9;
+        background-color: #131314;
         color: #000000 !important;
     }
     
@@ -308,4 +308,5 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
+
 
