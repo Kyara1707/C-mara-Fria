@@ -204,7 +204,10 @@ def tela_nao_conformidade():
     
     with st.form("form_nc"):
         st.markdown("### 📋 Check-list de Avaria")
-        
+
+        st.write("**Armazém da Avaria:**")
+        arm_avaria = st.radio("Selecione:", ["Armazém A", "Armazém B", "Armazém C", "Armazém R", "Armazém M"], horizontal=True)
+
         st.write("**Localização da Avaria:**")
         local_avaria = st.radio("Selecione:", ["Topo", "Meio", "Base"], horizontal=True)
         st.divider()
@@ -219,6 +222,7 @@ def tela_nao_conformidade():
         chk_emb = c2.checkbox("Embalagem Avariada")
         chk_pal_q = c2.checkbox("Palete Quebrado")
         chk_pal_d = c2.checkbox("Palete Desalinhado")
+        chk_pal_d = c2.checkbox("Vazamento")
         
         st.divider()
         obs = st.text_area("Observações / Detalhes:")
@@ -308,6 +312,7 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
+
 
 
 
