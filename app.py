@@ -42,7 +42,7 @@ st.markdown("""
     
     /* Forçar cor preta dentro das caixas de texto */
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
-        color: #f0f0f0 !important;
+        color: #000000 !important;
     }
 
     /* Títulos em Azul Escuro */
@@ -312,6 +312,7 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
+
 
 
 
