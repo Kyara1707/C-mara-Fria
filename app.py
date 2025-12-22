@@ -107,7 +107,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE DADOS ---
+# --- FUNÇÕES DE DADOS (CORRIGIDAS) ---
 
 def carregar_usuarios():
     if not os.path.exists(ARQUIVO_USUARIOS): return None
@@ -129,12 +129,29 @@ def carregar_sku():
 def carregar_historico_temp():
     if not os.path.exists(ARQUIVO_DADOS_TEMP):
         return pd.DataFrame(columns=["Usuario", "Cargo", "Data", "Horario", "Temperatura", "Status"])
-    return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";")
+    try:
+        return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";")
+    except pd.errors.ParserError:
+        # Tenta ler ignorando linhas ruins se o arquivo estiver corrompido
+        return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";", on_bad_lines='skip', engine='python')
+    except:
+        return pd.DataFrame(columns=["Usuario", "Cargo", "Data", "Horario", "Temperatura", "Status"])
 
 def carregar_historico_nc():
     if not os.path.exists(ARQUIVO_DADOS_NC):
         return pd.DataFrame()
-    return pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
+    
+    try:
+        # Tenta ler normal
+        return pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
+    except pd.errors.ParserError:
+        # Se falhar (por mistura de colunas antigas/novas), lê com engine python e pula erros
+        try:
+            return pd.read_csv(ARQUIVO_DADOS_NC, sep=";", on_bad_lines='skip', engine='python')
+        except:
+            return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
 
 def salvar_temp(usuario, cargo, temp, status):
     agora = datetime.now()
@@ -228,7 +245,6 @@ def tela_nao_conformidade():
         with st.form("form_nc"):
             st.markdown("### 📋 Localização & Detalhes")
             
-            # --- NOVO: CAMPO RUA ---
             col_loc1, col_loc2 = st.columns(2)
             with col_loc1:
                 arm_avaria = st.selectbox("Armazém:", ["Armazém A", "Armazém B", "Armazém C", "Armazém R", "Armazém M"])
@@ -258,7 +274,7 @@ def tela_nao_conformidade():
                     dados = {
                         "Usuario": st.session_state['usuario_nome'], "Cargo": st.session_state['usuario_cargo'],
                         "SKU": codigo_input, "Descricao_SKU": material_nome, 
-                        "Armazem": arm_avaria, "Rua": rua_avaria, # Salva a Rua
+                        "Armazem": arm_avaria, "Rua": rua_avaria,
                         "Local_Avaria": local_avaria, "Observacoes": obs,
                         "Quebra_Garrafa": "Sim" if chk_quebra else "Não",
                         "Lata_Amassada": "Sim" if chk_lata_am else "Não",
@@ -281,7 +297,6 @@ def tela_nao_conformidade():
         if df_nc.empty:
             st.info("Nenhuma Não Conformidade registrada ainda.")
         else:
-            # --- 1. DOWNLOAD ---
             with open(ARQUIVO_DADOS_NC, "rb") as file:
                 st.download_button(
                     label="📥 Baixar CSV de Avarias",
@@ -291,19 +306,14 @@ def tela_nao_conformidade():
                 )
             
             st.markdown("---")
-            
-            # --- KPI ---
             total_avarias = len(df_nc)
             st.metric("Total de Ocorrências", total_avarias)
             
-            # --- 2. GRÁFICO ROSQUINHA (Tipos de Avaria) ---
             colunas_avarias = ["Quebra_Garrafa", "Lata_Amassada", "Filme_Rasgado", "Falta_SKU", 
                                "Emb_Avariada", "Palete_Quebrado", "Palete_Desalinhado", "Vazamento"]
             
-            # Verifica quais colunas existem no CSV (caso seja um CSV antigo sem todas as colunas)
             cols_existentes = [c for c in colunas_avarias if c in df_nc.columns]
             
-            # Conta quantos "Sim" existem em cada coluna
             contagem_avarias = {}
             for col in cols_existentes:
                 qtd = df_nc[df_nc[col] == 'Sim'].shape[0]
@@ -326,42 +336,32 @@ def tela_nao_conformidade():
             else:
                 st.warning("Não há avarias do tipo marcado 'Sim' nos registros.")
 
-            # --- 3. GRÁFICOS LADO A LADO ---
             c_graf1, c_graf2 = st.columns(2)
             
             with c_graf1:
-                # Armazéns com mais avarias
                 if 'Armazem' in df_nc.columns:
                     counts_arm = df_nc['Armazem'].value_counts()
                     fig_bar = go.Figure(go.Bar(
-                        x=counts_arm.values, 
-                        y=counts_arm.index, 
-                        orientation='h',
+                        x=counts_arm.values, y=counts_arm.index, orientation='h',
                         marker=dict(color='#479bd8')
                     ))
                     fig_bar.update_layout(
-                        title="Ocorrências por Armazém",
-                        template="plotly_dark",
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)',
+                        title="Ocorrências por Armazém", template="plotly_dark",
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                         font=dict(color="#f0f0f0")
                     )
                     st.plotly_chart(fig_bar, use_container_width=True)
 
             with c_graf2:
-                # Localização (Topo, Meio, Base)
                 if 'Local_Avaria' in df_nc.columns:
                     counts_loc = df_nc['Local_Avaria'].value_counts()
                     fig_loc = go.Figure(go.Bar(
-                        x=counts_loc.index, 
-                        y=counts_loc.values,
-                        marker=dict(color=['#ff4444', '#44ff44', '#ffff44']) # Cores diferentes
+                        x=counts_loc.index, y=counts_loc.values,
+                        marker=dict(color=['#ff4444', '#44ff44', '#ffff44'])
                     ))
                     fig_loc.update_layout(
-                        title="Ocorrências por Posição",
-                        template="plotly_dark",
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)',
+                        title="Ocorrências por Posição", template="plotly_dark",
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                         font=dict(color="#f0f0f0")
                     )
                     st.plotly_chart(fig_loc, use_container_width=True)
@@ -370,7 +370,6 @@ def tela_grafico_temp():
     st.markdown("## 📊 Controle de Temperatura")
     st.markdown("---")
 
-    # --- UPLOAD DE ARQUIVO ---
     uploaded_file = st.file_uploader("📂 Carregar CSV externo (Para gerar gráfico)", type=["csv"])
     
     df_final = pd.DataFrame()
@@ -406,7 +405,6 @@ def tela_grafico_temp():
             df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
             df_final = df.dropna(subset=['Datetime'])
 
-    # --- PLOTAGEM ---
     if df_final.empty:
         st.info("Aguardando dados para gerar o gráfico.")
         return
