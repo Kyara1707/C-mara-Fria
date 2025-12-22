@@ -139,7 +139,7 @@ def salvar_nc(dados_dict):
 def tela_login():
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<h1 style='text-align: center;'>🧊 ColdSpec</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: black;'>Monitoramento & Qualidade</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: white;'>Monitoramento & Qualidade</p>", unsafe_allow_html=True)
     st.markdown("---")
     
     col1, col2, col3 = st.columns([1,2,1])
@@ -308,6 +308,7 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
+
 
 
 
