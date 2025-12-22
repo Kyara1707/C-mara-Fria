@@ -40,7 +40,7 @@ st.markdown("""
     }
 
     /* 4. Labels de Inputs */
-    .stTextInput > label, .stNumberInput > label, .stSelectbox > label, .stRadio > label, .stTextArea > label {
+    .stTextInput > label, .stNumberInput > label, .stSelectbox > label, .stRadio > label, .stTextArea > label, .stFileUploader > label {
         color: #f0f0f0 !important;
         font-weight: bold;
     }
@@ -103,17 +103,14 @@ def carregar_usuarios():
     except: return None
 
 def carregar_sku():
-    # Verifica se arquivo existe
     if not os.path.exists(ARQUIVO_SKU): 
-        return None # Retorna None para sabermos que não existe
+        return None
     try: 
-        # Tenta ler com ponto e vírgula
         df = pd.read_csv(ARQUIVO_SKU, sep=';', encoding='latin1', dtype=str)
-        # Se só tiver 1 coluna, talvez seja separado por vírgula
         if df.shape[1] < 2:
             df = pd.read_csv(ARQUIVO_SKU, sep=',', encoding='latin1', dtype=str)
         return df
-    except: return pd.DataFrame() # Retorna vazio se der erro de leitura
+    except: return pd.DataFrame()
 
 def carregar_historico_temp():
     if not os.path.exists(ARQUIVO_DADOS_TEMP):
@@ -198,23 +195,20 @@ def tela_nao_conformidade():
     material_nome = ""
     aviso_sku = ""
     
-    # Lógica de busca do SKU
     if df_sku is None:
         aviso_sku = "⚠️ Arquivo 'sku.csv' não encontrado no sistema."
     elif df_sku.empty:
         aviso_sku = "⚠️ Arquivo 'sku.csv' está vazio ou ilegível."
     elif codigo_input:
         try:
-            # Pega a primeira coluna como código e a segunda como descrição
             col_cod = df_sku.columns[0]
             res = df_sku[df_sku[col_cod].astype(str).str.strip() == codigo_input.strip()]
             
             if not res.empty:
-                # Tenta pegar a segunda coluna
                 if len(res.columns) > 1:
                     material_nome = str(res.iloc[0].values[1])
                 else:
-                    material_nome = "Descrição não encontrada (CSV só tem 1 coluna)"
+                    material_nome = "Descrição não encontrada"
             else:
                 material_nome = "SKU não cadastrado"
         except Exception as e:
@@ -276,30 +270,89 @@ def tela_nao_conformidade():
             else: st.warning("⚠️ Favor informar o Código do SKU.")
 
 def tela_grafico_temp():
-    st.markdown("## 📊 Controle de Temperatura (Semanal)")
-    df = carregar_historico_temp()
+    st.markdown("## 📊 Controle de Temperatura")
+    st.markdown("---")
+
+    # --- NOVO: UPLOAD DE ARQUIVO ---
+    uploaded_file = st.file_uploader("📂 Carregar CSV externo (Para gerar gráfico)", type=["csv"])
     
-    if df.empty:
-        st.info("Nenhum dado registrado ainda.")
+    df_final = pd.DataFrame()
+    origem_dados = "interno" # interno ou upload
+
+    # Lógica: Se tiver upload, usa o upload. Se não, usa o arquivo local.
+    if uploaded_file is not None:
+        try:
+            # Tenta ler com separador ;
+            df_upload = pd.read_csv(uploaded_file, sep=";")
+            
+            # Mapeamento das colunas do CSV externo
+            col_data = "Hora de conclusão"
+            col_temp = "Temperatura da Câmara Fria:"
+
+            # Verifica se colunas existem
+            if col_data in df_upload.columns and col_temp in df_upload.columns:
+                # Converter temperatura (Ex: "5,4" -> 5.4 e "Em manutenção" -> NaN)
+                df_upload['Temperatura'] = df_upload[col_temp].astype(str).str.replace(',', '.')
+                df_upload['Temperatura'] = pd.to_numeric(df_upload['Temperatura'], errors='coerce')
+                
+                # Converter data/hora
+                # O pandas tenta inferir o formato automaticamente
+                df_upload['Datetime'] = pd.to_datetime(df_upload[col_data], dayfirst=False, errors='coerce')
+
+                # Filtrar apenas onde temos Data e Temperatura válidas
+                df_final = df_upload.dropna(subset=['Temperatura', 'Datetime'])
+                
+                origem_dados = "upload"
+                if df_final.empty:
+                    st.warning("O arquivo foi lido, mas não há dados válidos de temperatura (números) ou data.")
+            else:
+                st.error(f"O CSV precisa ter as colunas: '{col_data}' e '{col_temp}'")
+        except Exception as e:
+            st.error(f"Erro ao ler arquivo: {e}")
+
+    else:
+        # Carrega dados do sistema (manual)
+        df = carregar_historico_temp()
+        if not df.empty:
+            df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+            df_final = df.dropna(subset=['Datetime'])
+
+    # --- PLOTAGEM DO GRÁFICO ---
+    if df_final.empty:
+        st.info("Aguardando dados para gerar o gráfico.")
         return
 
-    df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], format='%d/%m/%Y %H:%M:%S')
-    data_limite = datetime.now() - timedelta(days=7)
-    df_semanal = df[df['Datetime'] >= data_limite]
+    # Filtro de data (opcional, aqui pego tudo ou últimos 7 dias se for manual)
+    if origem_dados == "interno":
+        data_limite = datetime.now() - timedelta(days=7)
+        df_plot = df_final[df_final['Datetime'] >= data_limite]
+    else:
+        df_plot = df_final # Se for upload, mostra tudo que tem no arquivo
 
-    if df_semanal.empty:
-        st.warning("Sem dados nesta semana.")
+    if df_plot.empty:
+        st.warning("Sem dados recentes para exibir.")
         return
 
-    # Gráfico
+    # Ordenar por data para o gráfico não ficar riscado
+    df_plot = df_plot.sort_values(by='Datetime')
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df_semanal['Datetime'], y=df_semanal['Temperatura'], mode='lines+markers', name='Temperatura', line=dict(color='#479bd8', width=4), marker=dict(size=10, color='white', line=dict(width=2, color='#479bd8'))))
+    fig.add_trace(go.Scatter(
+        x=df_plot['Datetime'], 
+        y=df_plot['Temperatura'], 
+        mode='lines+markers', 
+        name='Temperatura', 
+        line=dict(color='#479bd8', width=4), 
+        marker=dict(size=8, color='white', line=dict(width=2, color='#479bd8'))
+    ))
+    
     fig.add_hline(y=LSE, line_dash="dash", line_color="#ff4444", annotation_text=f"Max {LSE}ºC")
     fig.add_hline(y=LIE, line_dash="dash", line_color="#44ff44", annotation_text=f"Min {LIE}ºC")
     
-    # --- AJUSTE VISUAL ESCURO ---
     fig.update_layout(
-        title="Variação Térmica", xaxis_title="Data/Hora", yaxis_title="ºC",
+        title=f"Variação Térmica ({'Arquivo Externo' if origem_dados == 'upload' else 'Registros Manuais'})", 
+        xaxis_title="Data/Hora", 
+        yaxis_title="ºC",
         template="plotly_dark",
         height=450,
         paper_bgcolor='rgba(0,0,0,0)', 
@@ -308,12 +361,21 @@ def tela_grafico_temp():
     )
     st.plotly_chart(fig, use_container_width=True)
     
-    with st.expander("Ver Histórico de Temperatura"):
-        tabela_ordenada = df_semanal.sort_values(by='Datetime', ascending=False)
-        st.dataframe(tabela_ordenada[['Data', 'Horario', 'Usuario', 'Temperatura', 'Status']], use_container_width=True)
+    # Exibir tabela de dados brutos
+    with st.expander("Ver Tabela Detalhada"):
+        # Seleciona colunas para mostrar dependendo da origem
+        if origem_dados == "upload":
+            cols_show = ['Datetime', 'Temperatura da Câmara Fria:', 'Nome', 'Conferente coletor:']
+            # Filtra apenas colunas que realmente existem no df
+            cols_existentes = [c for c in cols_show if c in df_plot.columns]
+            st.dataframe(df_plot[cols_existentes], use_container_width=True)
+        else:
+            st.dataframe(df_plot[['Data', 'Horario', 'Usuario', 'Temperatura', 'Status']], use_container_width=True)
 
-    with open(ARQUIVO_DADOS_TEMP, "rb") as file:
-        st.download_button(label="📥 Baixar Dados Temp (Excel)", data=file, file_name="relatorio_temperatura.csv", mime="text/csv")
+    # Botão de download (apenas se for manual, pois upload o usuário já tem o arquivo)
+    if origem_dados == "interno":
+        with open(ARQUIVO_DADOS_TEMP, "rb") as file:
+            st.download_button(label="📥 Baixar Histórico (Excel)", data=file, file_name="relatorio_temperatura.csv", mime="text/csv")
 
 # --- NAVEGAÇÃO ---
 if 'usuario_nome' not in st.session_state:
@@ -332,4 +394,3 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
-
