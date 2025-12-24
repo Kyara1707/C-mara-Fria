@@ -16,10 +16,10 @@ st.set_page_config(
 ARQUIVO_USUARIOS = "users.csv"
 ARQUIVO_DADOS_TEMP = "dados_temperatura.csv"
 ARQUIVO_DADOS_NC = "dados_nao_conformidade.csv"
-ARQUIVO_SKU = "sku (1).csv"
+ARQUIVO_SKU = "sku.csv"
 
-LIE = 2.0
-LSE = 7.0
+LIE = 2.0  # Limite Inferior Temperatura
+LSE = 7.0  # Limite Superior Temperatura
 
 # --- ESTILO CSS ---
 st.markdown("""
@@ -50,6 +50,9 @@ st.markdown("""
         border-radius: 15px; padding: 20px; text-align: center; margin-top: 15px;
     }
     .alert-box-green p, .alert-box-green div { color: #006600 !important; font-weight: bold; }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { background-color: #1f1f1f; border-radius: 4px; color: #f0f0f0; padding: 10px 20px; }
+    .stTabs [aria-selected="true"] { background-color: #479bd8 !important; color: white !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,7 +70,6 @@ def carregar_sku():
     if not os.path.exists(ARQUIVO_SKU): return None
     try:
         df = pd.read_csv(ARQUIVO_SKU, sep=';', encoding='latin1', dtype=str)
-        # Tenta separador vírgula se ponto e vírgula falhar na estrutura
         if df.shape[1] < 2:
             df = pd.read_csv(ARQUIVO_SKU, sep=',', encoding='latin1', dtype=str)
         return df
@@ -82,13 +84,12 @@ def carregar_historico_temp():
         return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";", on_bad_lines='skip', engine='python')
 
 def carregar_historico_nc():
+    # Esta função lê o arquivo central. Assim, todos veem os dados de todos.
     if not os.path.exists(ARQUIVO_DADOS_NC):
         return pd.DataFrame()
     try:
-        df = pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
-        return df
+        return pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
     except:
-        # Fallback para arquivos corrompidos
         try:
             return pd.read_csv(ARQUIVO_DADOS_NC, sep=";", on_bad_lines='skip', engine='python')
         except:
@@ -104,39 +105,37 @@ def salvar_temp(usuario, cargo, temp, status):
         nova_linha.to_csv(ARQUIVO_DADOS_TEMP, mode='a', header=not os.path.exists(ARQUIVO_DADOS_TEMP), index=False, sep=";")
     except PermissionError: st.error("Erro: Feche o arquivo Excel!")
 
-# --- FUNÇÃO DE SALVAR CORRIGIDA (INTELIGENTE) ---
+# --- FUNÇÃO DE SALVAR REESCRITA PARA GARANTIR PERSISTÊNCIA ---
 def salvar_nc(dados_dict):
     agora = datetime.now()
     dados_dict['Data'] = agora.strftime("%d/%m/%Y")
     dados_dict['Horario'] = agora.strftime("%H:%M:%S")
     
-    # Transforma o novo dado em DataFrame
     df_novo = pd.DataFrame([dados_dict])
     
     try:
         if os.path.exists(ARQUIVO_DADOS_NC):
-            # 1. Tenta ler o arquivo existente
+            # Lê o arquivo existente para garantir que não perderemos nada e alinhar colunas
             try:
                 df_antigo = pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
             except:
-                df_antigo = pd.DataFrame() # Se der erro, considera vazio
+                df_antigo = pd.DataFrame() # Se arquivo estiver corrompido, recomeça
             
-            # 2. Concatena (Isso alinha as colunas automaticamente!)
-            # Se 'Rua' não existia no antigo, o Pandas cria e preenche com NaN nas linhas velhas
+            # Concatena o antigo com o novo
             df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
             
-            # 3. Salva o arquivo completo por cima (overwrite)
+            # Salva o arquivo completo novamente
             df_final.to_csv(ARQUIVO_DADOS_NC, index=False, sep=";")
         else:
-            # Se não existe, cria novo
+            # Se arquivo não existe, cria um novo com os dados
             df_novo.to_csv(ARQUIVO_DADOS_NC, index=False, sep=";")
             
         return True
     except PermissionError:
-        st.error("Erro: Feche o arquivo de Não Conformidade (Excel)!")
+        st.error("Erro de Permissão: Feche o arquivo 'dados_nao_conformidade.csv' se estiver aberto!")
         return False
     except Exception as e:
-        st.error(f"Erro ao salvar: {e}")
+        st.error(f"Erro desconhecido ao salvar: {e}")
         return False
 
 # --- TELAS ---
@@ -181,10 +180,12 @@ def tela_cadastro_temp():
 def tela_nao_conformidade():
     st.markdown("## ⚠️ Gestão de Não Conformidade")
     
-    tab1, tab2 = st.tabs(["📝 Cadastrar NC", "📊 Dashboard"])
+    # Abas
+    tab1, tab2 = st.tabs(["📝 Cadastrar NC", "📊 Dashboard Global"])
     
     # --- ABA 1: CADASTRO ---
     with tab1:
+        st.caption("Registre aqui a avaria. Ela ficará visível para todos no Dashboard.")
         df_sku = carregar_sku()
         codigo_input = st.text_input("Código do SKU:")
         material_nome = ""
@@ -241,72 +242,148 @@ def tela_nao_conformidade():
                         "Vazamento": "Sim" if chk_vazamento else "Não"
                     }
                     if salvar_nc(dados):
-                        st.success("✅ Salvo com sucesso!")
-                        time.sleep(1)
+                        st.success("✅ Salvo com sucesso! Atualizando dashboard...")
+                        time.sleep(1.5) # Tempo para ler
                         st.rerun()
                 else: st.warning("⚠️ Digite o SKU.")
 
-    # --- ABA 2: DASHBOARD ---
+    # --- ABA 2: DASHBOARD GLOBAL ---
     with tab2:
         df_nc = carregar_historico_nc()
         
         if df_nc.empty:
-            st.info("Sem dados registrados.")
+            st.info("Ainda não há avarias registradas no sistema.")
         else:
             # Botão Download
             csv_data = df_nc.to_csv(index=False, sep=";").encode('utf-8')
-            st.download_button("📥 Baixar CSV", data=csv_data, file_name="avarias.csv", mime="text/csv")
+            st.download_button("📥 Baixar Relatório Geral (CSV)", data=csv_data, file_name="avarias_geral.csv", mime="text/csv")
             
             st.markdown("---")
-            st.metric("Total de Ocorrências", len(df_nc))
+            st.metric("Total Global de Ocorrências", len(df_nc))
             
-            # --- LÓGICA DE GRÁFICOS (Com tratamento de string) ---
+            # --- LÓGICA DE GRÁFICOS ---
             colunas_avarias = ["Quebra_Garrafa", "Lata_Amassada", "Filme_Rasgado", "Falta_SKU", 
                                "Emb_Avariada", "Palete_Quebrado", "Palete_Desalinhado", "Vazamento"]
             
             contagem_avarias = {}
             for col in colunas_avarias:
                 if col in df_nc.columns:
-                    # TRATAMENTO DE STRING: Garante que espaços ou 'Sim ' não quebrem a conta
+                    # Conta "Sim", limpando espaços extras
                     qtd = df_nc[df_nc[col].astype(str).str.strip() == 'Sim'].shape[0]
                     if qtd > 0:
                         contagem_avarias[col.replace('_', ' ')] = qtd
             
             if contagem_avarias:
                 fig_donut = go.Figure(data=[go.Pie(labels=list(contagem_avarias.keys()), values=list(contagem_avarias.values()), hole=.4)])
-                fig_donut.update_layout(title="Tipos de Avaria", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
+                fig_donut.update_layout(title="Tipos de Avaria (Global)", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
                 st.plotly_chart(fig_donut, use_container_width=True)
             else:
-                st.warning("Nenhuma avaria marcada como 'Sim' encontrada.")
+                st.warning("Dados existem, mas nenhuma avaria específica foi marcada como 'Sim'.")
 
             c1, c2 = st.columns(2)
             with c1:
                 if 'Armazem' in df_nc.columns:
                     counts = df_nc['Armazem'].value_counts()
-                    fig = go.Figure(go.Bar(x=counts.values, y=counts.index, orientation='h'))
+                    fig = go.Figure(go.Bar(x=counts.values, y=counts.index, orientation='h', marker=dict(color='#479bd8')))
                     fig.update_layout(title="Por Armazém", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
                     st.plotly_chart(fig, use_container_width=True)
             
             with c2:
                 if 'Local_Avaria' in df_nc.columns:
                     counts = df_nc['Local_Avaria'].value_counts()
-                    fig = go.Figure(go.Bar(x=counts.index, y=counts.values))
+                    fig = go.Figure(go.Bar(x=counts.index, y=counts.values, marker=dict(color=['#ff4444', '#44ff44', '#ffff44'])))
                     fig.update_layout(title="Por Posição", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
                     st.plotly_chart(fig, use_container_width=True)
+            
+            with st.expander("Ver Tabela Completa"):
+                st.dataframe(df_nc, use_container_width=True)
 
 def tela_grafico_temp():
     st.markdown("## 📊 Controle de Temperatura")
-    st.info("Funcionalidade de gráfico de temperatura aqui.")
-    # (Código do gráfico simplificado para focar na solução do problema principal)
-    df = carregar_historico_temp()
-    if not df.empty:
-        df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], dayfirst=True, errors='coerce')
-        df = df.dropna(subset=['Datetime'])
+    st.markdown("---")
+
+    uploaded_file = st.file_uploader("📂 Carregar CSV externo (Para gerar gráfico)", type=["csv"])
+    
+    df_final = pd.DataFrame()
+    origem_dados = "interno"
+
+    if uploaded_file is not None:
+        try:
+            try:
+                df_upload = pd.read_csv(uploaded_file, sep=";")
+            except UnicodeDecodeError:
+                uploaded_file.seek(0)
+                df_upload = pd.read_csv(uploaded_file, sep=";", encoding="latin1")
+            
+            col_data_csv = "Hora de conclusão"
+            col_temp_csv = "Temperatura da Câmara Fria:"
+
+            if col_data_csv in df_upload.columns and col_temp_csv in df_upload.columns:
+                df_upload['Temperatura'] = df_upload[col_temp_csv].astype(str).str.replace(',', '.')
+                df_upload['Temperatura'] = pd.to_numeric(df_upload['Temperatura'], errors='coerce')
+                df_upload['Datetime'] = pd.to_datetime(df_upload[col_data_csv], dayfirst=True, errors='coerce')
+                df_final = df_upload.dropna(subset=['Temperatura', 'Datetime'])
+                origem_dados = "upload"
+                if df_final.empty:
+                    st.warning("Arquivo lido, mas sem dados válidos (verifique formatos).")
+            else:
+                st.error(f"Erro: O CSV precisa ter as colunas: '{col_data_csv}' e '{col_temp_csv}'")
+        except Exception as e:
+            st.error(f"Erro ao processar arquivo: {e}")
+
+    else:
+        df = carregar_historico_temp()
         if not df.empty:
-            df = df.sort_values('Datetime')
-            fig = go.Figure(go.Scatter(x=df['Datetime'], y=df['Temperatura'], mode='lines+markers'))
-            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"), title="Histórico")
-            st.plotly_chart(fig, use_container_width=True)
+            df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], dayfirst=True, errors='coerce')
+            df_final = df.dropna(subset=['Datetime'])
+
+    if df_final.empty:
+        st.info("Aguardando dados para gerar o gráfico.")
+        return
+
+    if origem_dados == "interno":
+        data_limite = datetime.now() - timedelta(days=7)
+        df_plot = df_final[df_final['Datetime'] >= data_limite]
+    else:
+        df_plot = df_final
+
+    if df_plot.empty:
+        st.warning("Sem dados recentes.")
+        return
+
+    df_plot = df_plot.sort_values(by='Datetime')
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df_plot['Datetime'], y=df_plot['Temperatura'], 
+        mode='lines+markers', name='Temperatura', 
+        line=dict(color='#479bd8', width=4), 
+        marker=dict(size=8, color='white', line=dict(width=2, color='#479bd8'))
+    ))
+    
+    fig.add_hline(y=LSE, line_dash="dash", line_color="#ff4444", annotation_text=f"Max {LSE}ºC")
+    fig.add_hline(y=LIE, line_dash="dash", line_color="#44ff44", annotation_text=f"Min {LIE}ºC")
+    
+    fig.update_layout(
+        title=f"Variação Térmica ({'Arquivo Externo' if origem_dados == 'upload' else 'Registros Manuais'})", 
+        xaxis_title="Data/Hora", yaxis_title="ºC",
+        template="plotly_dark", height=450,
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color="#f0f0f0")
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    with st.expander("Ver Dados Detalhados"):
+        if origem_dados == "upload":
+            cols_exibir = ['Datetime', 'Temperatura da Câmara Fria:', 'Nome', 'Conferente coletor:']
+            cols_finais = [c for c in cols_exibir if c in df_plot.columns]
+            st.dataframe(df_plot[cols_finais], use_container_width=True)
+        else:
+            st.dataframe(df_plot[['Data', 'Horario', 'Usuario', 'Temperatura', 'Status']], use_container_width=True)
+
+    if origem_dados == "interno":
+        with open(ARQUIVO_DADOS_TEMP, "rb") as file:
+            st.download_button(label="📥 Baixar Histórico (Excel)", data=file, file_name="relatorio_temperatura.csv", mime="text/csv")
 
 # --- NAVEGAÇÃO ---
 if 'usuario_nome' not in st.session_state:
