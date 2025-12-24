@@ -158,24 +158,78 @@ def tela_login():
 
 def tela_cadastro_temp():
     st.markdown("## 🌡️ Monitoramento de Temperatura")
-    st.markdown(f"**Faixa:** <span style='color:#479bd8'>{LIE}ºC</span> a <span style='color:#479bd8'>{LSE}ºC</span>", unsafe_allow_html=True)
-    with st.container():
+    
+    # CRIAMOS DUAS ABAS: Uma para registrar, outra para ver o histórico
+    tab1, tab2 = st.tabs(["📝 Nova Leitura", "📊 Histórico Geral"])
+
+    # --- ABA 1: REGISTRO ---
+    with tab1:
+        st.markdown(f"**Faixa:** <span style='color:#479bd8'>{LIE}ºC</span> a <span style='color:#479bd8'>{LSE}ºC</span>", unsafe_allow_html=True)
         st.write("") 
-        temp_input = st.number_input("Temperatura Atual (ºC):", step=0.1, format="%.1f")
+        temp_input = st.number_input("🌡️ Temperatura Atual (ºC):", step=0.1, format="%.1f", key="temp_input_field")
+        
         if st.button("SALVAR LEITURA"):
             status = "OK" if LIE <= temp_input <= LSE else "ERRO"
             salvar_temp(st.session_state['usuario_nome'], st.session_state['usuario_cargo'], temp_input, status)
             if status == "OK":
                 st.markdown(f"""<div class="alert-box-green"><p>✅ SUCESSO</p><p>{temp_input}ºC registrada.</p></div>""", unsafe_allow_html=True)
                 st.balloons()
+                time.sleep(1) # Pequena pausa para ver a mensagem
+                st.rerun()    # Recarrega para atualizar o histórico na outra aba
             else:
-                st.markdown(f"""<div class="alert-box-red"><p>🚨 ERRO!</p><p>{temp_input}ºC</p></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="alert-box-red"><p>🚨 FORA DA FAIXA!</p><p>{temp_input}ºC</p></div>""", unsafe_allow_html=True)
+                time.sleep(1)
+                st.rerun()
+
+    # --- ABA 2: HISTÓRICO VISUAL (GLOBAL) ---
+    with tab2:
+        df = carregar_historico_temp()
+        
+        if df.empty:
+            st.info("Nenhum registro encontrado.")
+        else:
+            # Ordenar do mais recente para o mais antigo (se possível)
+            if 'Data' in df.columns and 'Horario' in df.columns:
+                try:
+                    df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], dayfirst=True, errors='coerce')
+                    df = df.sort_values(by='Datetime', ascending=False).drop(columns=['Datetime'])
+                except:
+                    pass # Se falhar, mostra como está
+
+            # Botão de Download
+            csv_data = df.to_csv(index=False, sep=";").encode('utf-8')
+            st.download_button("📥 Baixar Histórico Completo", data=csv_data, file_name="historico_temperatura.csv", mime="text/csv")
+            
+            st.markdown("---")
+            
+            # Métricas rápidas
+            col_met1, col_met2, col_met3 = st.columns(3)
+            col_met1.metric("Total de Leituras", len(df))
+            
+            # Última temperatura
+            ultima_temp = df.iloc[0]['Temperatura'] if not df.empty else 0
+            delta_temp = None
+            if len(df) > 1:
+                penultima = pd.to_numeric(df.iloc[1]['Temperatura'], errors='coerce')
+                atual = pd.to_numeric(ultima_temp, errors='coerce')
+                if not pd.isna(penultima) and not pd.isna(atual):
+                    delta_temp = round(atual - penultima, 1)
+
+            col_met2.metric("Última Temp.", f"{ultima_temp}ºC", delta=delta_temp)
+            
+            # Contagem de Erros
+            erros = df[df['Status'] == 'ERRO'].shape[0]
+            col_met3.metric("Desvios (ERRO)", erros, delta_color="inverse")
+            
+            st.divider()
+            st.write("📋 **Registros Recentes:**")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
 
 def tela_nao_conformidade():
     st.markdown("## 🚚 Gestão de Avarias (NC)")
     
-    # --- CORREÇÃO DO ERRO: BLOCO DE LIMPEZA NO TOPO ---
-    # Se a flag de sucesso estiver ativa, limpamos os campos ANTES de criá-los
+    # Lógica de limpar o form (no topo)
     if st.session_state.get('limpar_nc_sucesso'):
         st.session_state['nc_sku'] = ""
         st.session_state['nc_rua'] = ""
@@ -184,8 +238,6 @@ def tela_nao_conformidade():
         st.session_state['nc_loc'] = "Topo"
         for i in range(1, 9):
             st.session_state[f"nc_chk{i}"] = False
-        
-        # Desliga a flag para não limpar de novo enquanto o usuário digita
         st.session_state['limpar_nc_sucesso'] = False
         st.success("✅ Registro salvo e formulário limpo!")
 
@@ -194,7 +246,6 @@ def tela_nao_conformidade():
     # --- ABA 1: CADASTRO ---
     with tab1:
         df_sku = carregar_sku()
-        
         codigo_input = st.text_input("📦 Código do SKU:", key="nc_sku")
         material_nome = ""
         
@@ -212,7 +263,6 @@ def tela_nao_conformidade():
         
         with st.form("form_nc"):
             c_loc1, c_loc2 = st.columns(2)
-            
             arm_avaria = c_loc1.selectbox("🚚 Armazém:", ["Armazém A", "Armazém B", "Armazém C", "Armazém R", "Armazém M"], key="nc_arm")
             rua_avaria = c_loc2.text_input("🗺️ Rua / Corredor:", placeholder="Ex: 15B", key="nc_rua")
 
@@ -222,7 +272,6 @@ def tela_nao_conformidade():
             st.divider()
             st.write("**⚠️ Tipo de Avaria:**")
             c1, c2 = st.columns(2)
-            
             chk_quebra = c1.checkbox("Quebra de Garrafa", key="nc_chk1")
             chk_lata_am = c1.checkbox("Lata Amassada/Rasgada", key="nc_chk2")
             chk_filme = c1.checkbox("Filme Rasgado", key="nc_chk3")
@@ -235,7 +284,6 @@ def tela_nao_conformidade():
             st.divider()
             obs = st.text_area("📝 Observações:", key="nc_obs")
             
-            # Botão de Envio
             submitted = st.form_submit_button("💾 SALVAR REGISTRO")
             
             if submitted:
@@ -255,16 +303,13 @@ def tela_nao_conformidade():
                         "Vazamento": "Sim" if chk_vazamento else "Não"
                     }
                     if salvar_nc(dados):
-                        # Ativa a flag para limpar na próxima rodada (no topo da função)
                         st.session_state['limpar_nc_sucesso'] = True
-                        st.rerun() # Recarrega a página imediatamente
-                else: 
-                    st.warning("⚠️ Digite o SKU.")
+                        st.rerun()
+                else: st.warning("⚠️ Digite o SKU.")
 
     # --- ABA 2: DASHBOARD ---
     with tab2:
         df_nc = carregar_historico_nc()
-        
         if df_nc.empty:
             st.info("Sem dados registrados.")
         else:
@@ -307,7 +352,7 @@ def tela_nao_conformidade():
                     st.plotly_chart(fig, use_container_width=True)
 
 def tela_grafico_temp():
-    st.markdown("## 📊 Controle de Temperatura")
+    st.markdown("## 📊 Análise Gráfica")
     st.markdown("---")
 
     uploaded_file = st.file_uploader("📂 Carregar CSV externo (Para gerar gráfico)", type=["csv"])
@@ -333,7 +378,7 @@ def tela_grafico_temp():
                 df_final = df_upload.dropna(subset=['Temperatura', 'Datetime'])
                 origem_dados = "upload"
                 if df_final.empty:
-                    st.warning("Arquivo lido, mas sem dados válidos (verifique formatos).")
+                    st.warning("Arquivo lido, mas sem dados válidos.")
             else:
                 st.error(f"Erro: O CSV precisa ter as colunas: '{col_data_csv}' e '{col_temp_csv}'")
         except Exception as e:
@@ -397,13 +442,9 @@ def tela_grafico_temp():
 if 'usuario_nome' not in st.session_state:
     tela_login()
 else:
-    # 👩🏻‍💻 Ícone adicionado ao nome do usuário
     st.sidebar.title(f"👩🏻‍💻 {st.session_state['usuario_nome']}")
-    
-    # 🚚 e 📊 Ícones adicionados ao menu
-    menu = st.sidebar.radio("Menu", ["🌡️ Temperatura", "🚚 Não Conformidade", "📊 Gráfico Temp"])
+    menu = st.sidebar.radio("Menu", ["🌡️ Temperatura", "🚚 Não Conformidade", "📊 Análise Gráfica"])
     
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "🚚 Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
-
