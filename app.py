@@ -16,10 +16,10 @@ st.set_page_config(
 ARQUIVO_USUARIOS = "users.csv"
 ARQUIVO_DADOS_TEMP = "dados_temperatura.csv"
 ARQUIVO_DADOS_NC = "dados_nao_conformidade.csv"
-ARQUIVO_SKU = "sku (1).csv"
+ARQUIVO_SKU = "sku.csv"
 
-LIE = 2.0  # Limite Inferior Temperatura
-LSE = 7.0  # Limite Superior Temperatura
+LIE = 2.0
+LSE = 7.0
 
 # --- ESTILO CSS ---
 st.markdown("""
@@ -28,7 +28,7 @@ st.markdown("""
     p, label, span, div, li, h1, h2, h3, h4, h5, h6 { color: #f0f0f0 !important; }
     h1, h2, h3 { color: #479bd8 !important; }
     .stTextInput > label, .stNumberInput > label, .stSelectbox > label, .stRadio > label, .stTextArea > label, .stFileUploader > label {
-        color: #f0f0f0 !important; font-weight: bold;
+        color: #f0f0f0 !important; font-weight: bold; font-size: 1.1em;
     }
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
         background-color: #ffffff !important; color: #000000 !important;
@@ -119,7 +119,6 @@ def salvar_nc(dados_dict):
             except:
                 df_antigo = pd.DataFrame()
             
-            # Garante que as colunas batem para evitar desalinhamento
             df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
             df_final.to_csv(ARQUIVO_DADOS_NC, index=False, sep=";")
         else:
@@ -141,7 +140,7 @@ def tela_login():
     st.markdown("---")
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.info("Acesso Restrito")
+        st.info("Acesso Restrito 👩🏻‍💻")
         login_id = st.text_input("ID de Matrícula").strip()
         if st.button("ACESSAR"):
             df_users = carregar_usuarios()
@@ -173,15 +172,30 @@ def tela_cadastro_temp():
                 st.markdown(f"""<div class="alert-box-red"><p>🚨 ERRO!</p><p>{temp_input}ºC</p></div>""", unsafe_allow_html=True)
 
 def tela_nao_conformidade():
-    st.markdown("## ⚠️ Gestão de Não Conformidade")
+    st.markdown("## 🚚 Gestão de Avarias (NC)")
     
-    tab1, tab2 = st.tabs(["📝 Cadastrar NC", "📊 Dashboard"])
+    # --- CORREÇÃO DO ERRO: BLOCO DE LIMPEZA NO TOPO ---
+    # Se a flag de sucesso estiver ativa, limpamos os campos ANTES de criá-los
+    if st.session_state.get('limpar_nc_sucesso'):
+        st.session_state['nc_sku'] = ""
+        st.session_state['nc_rua'] = ""
+        st.session_state['nc_obs'] = ""
+        st.session_state['nc_arm'] = "Armazém A"
+        st.session_state['nc_loc'] = "Topo"
+        for i in range(1, 9):
+            st.session_state[f"nc_chk{i}"] = False
+        
+        # Desliga a flag para não limpar de novo enquanto o usuário digita
+        st.session_state['limpar_nc_sucesso'] = False
+        st.success("✅ Registro salvo e formulário limpo!")
+
+    tab1, tab2 = st.tabs(["📦 Registrar NC", "📊 Dashboard"])
     
     # --- ABA 1: CADASTRO ---
     with tab1:
         df_sku = carregar_sku()
-        # ADICIONADO KEY PARA PERMITIR LIMPEZA
-        codigo_input = st.text_input("Código do SKU:", key="nc_sku")
+        
+        codigo_input = st.text_input("📦 Código do SKU:", key="nc_sku")
         material_nome = ""
         
         if df_sku is not None and not df_sku.empty and codigo_input:
@@ -193,22 +207,22 @@ def tela_nao_conformidade():
                 else: material_nome = "Não encontrado"
             except: material_nome = "Erro ao buscar"
         
-        st.text_input("Descrição:", value=material_nome, disabled=True)
+        st.text_input("Descrição do Item:", value=material_nome, disabled=True)
         st.markdown("---")
         
         with st.form("form_nc"):
             c_loc1, c_loc2 = st.columns(2)
-            # KEYS ADICIONADAS EM TODOS OS CAMPOS
-            arm_avaria = c_loc1.selectbox("Armazém:", ["Armazém A", "Armazém B", "Armazém C", "Armazém R", "Armazém M"], key="nc_arm")
-            rua_avaria = c_loc2.text_input("Rua / Corredor:", placeholder="Ex: 15B", key="nc_rua")
+            
+            arm_avaria = c_loc1.selectbox("🚚 Armazém:", ["Armazém A", "Armazém B", "Armazém C", "Armazém R", "Armazém M"], key="nc_arm")
+            rua_avaria = c_loc2.text_input("🗺️ Rua / Corredor:", placeholder="Ex: 15B", key="nc_rua")
 
-            st.write("**Posição:**")
-            local_avaria = st.radio("Selecione:", ["Topo", "Meio", "Base"], horizontal=True, key="nc_loc")
+            st.write("**📍 Posição no Rack:**")
+            local_avaria = st.radio("Nível:", ["Topo", "Meio", "Base"], horizontal=True, key="nc_loc")
             
             st.divider()
-            st.write("**Avarias:**")
+            st.write("**⚠️ Tipo de Avaria:**")
             c1, c2 = st.columns(2)
-            # KEYS NOS CHECKBOXES
+            
             chk_quebra = c1.checkbox("Quebra de Garrafa", key="nc_chk1")
             chk_lata_am = c1.checkbox("Lata Amassada/Rasgada", key="nc_chk2")
             chk_filme = c1.checkbox("Filme Rasgado", key="nc_chk3")
@@ -219,9 +233,12 @@ def tela_nao_conformidade():
             chk_vazamento = c2.checkbox("Vazamento", key="nc_chk8")
             
             st.divider()
-            obs = st.text_area("Observações:", key="nc_obs")
+            obs = st.text_area("📝 Observações:", key="nc_obs")
             
-            if st.form_submit_button("SALVAR REGISTRO"):
+            # Botão de Envio
+            submitted = st.form_submit_button("💾 SALVAR REGISTRO")
+            
+            if submitted:
                 if codigo_input:
                     dados = {
                         "Usuario": st.session_state['usuario_nome'], "Cargo": st.session_state['usuario_cargo'],
@@ -238,25 +255,11 @@ def tela_nao_conformidade():
                         "Vazamento": "Sim" if chk_vazamento else "Não"
                     }
                     if salvar_nc(dados):
-                        st.success("✅ Salvo com sucesso! Limpando formulário...")
-                        
-                        # --- LIMPEZA AUTOMÁTICA DOS CAMPOS ---
-                        # Resetar strings
-                        st.session_state["nc_sku"] = ""
-                        st.session_state["nc_rua"] = ""
-                        st.session_state["nc_obs"] = ""
-                        
-                        # Resetar select/radio para o primeiro item
-                        st.session_state["nc_arm"] = "Armazém A"
-                        st.session_state["nc_loc"] = "Topo"
-                        
-                        # Resetar checkboxes
-                        for i in range(1, 9):
-                            st.session_state[f"nc_chk{i}"] = False
-                        
-                        time.sleep(1) # Pausa rápida para ler a msg
-                        st.rerun()    # Recarrega a página zerada
-                else: st.warning("⚠️ Digite o SKU.")
+                        # Ativa a flag para limpar na próxima rodada (no topo da função)
+                        st.session_state['limpar_nc_sucesso'] = True
+                        st.rerun() # Recarrega a página imediatamente
+                else: 
+                    st.warning("⚠️ Digite o SKU.")
 
     # --- ABA 2: DASHBOARD ---
     with tab2:
@@ -269,7 +272,7 @@ def tela_nao_conformidade():
             st.download_button("📥 Baixar CSV", data=csv_data, file_name="avarias.csv", mime="text/csv")
             
             st.markdown("---")
-            st.metric("Total de Ocorrências", len(df_nc))
+            st.metric("📦 Total de Ocorrências", len(df_nc))
             
             colunas_avarias = ["Quebra_Garrafa", "Lata_Amassada", "Filme_Rasgado", "Falta_SKU", 
                                "Emb_Avariada", "Palete_Quebrado", "Palete_Desalinhado", "Vazamento"]
@@ -283,7 +286,7 @@ def tela_nao_conformidade():
             
             if contagem_avarias:
                 fig_donut = go.Figure(data=[go.Pie(labels=list(contagem_avarias.keys()), values=list(contagem_avarias.values()), hole=.4)])
-                fig_donut.update_layout(title="Tipos de Avaria", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
+                fig_donut.update_layout(title="📊 Tipos de Avaria", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
                 st.plotly_chart(fig_donut, use_container_width=True)
             else:
                 st.warning("Nenhuma avaria marcada como 'Sim' encontrada.")
@@ -293,14 +296,14 @@ def tela_nao_conformidade():
                 if 'Armazem' in df_nc.columns:
                     counts = df_nc['Armazem'].value_counts()
                     fig = go.Figure(go.Bar(x=counts.values, y=counts.index, orientation='h', marker=dict(color='#479bd8')))
-                    fig.update_layout(title="Por Armazém", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
+                    fig.update_layout(title="🚚 Por Armazém", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
                     st.plotly_chart(fig, use_container_width=True)
             
             with c2:
                 if 'Local_Avaria' in df_nc.columns:
                     counts = df_nc['Local_Avaria'].value_counts()
                     fig = go.Figure(go.Bar(x=counts.index, y=counts.values, marker=dict(color=['#ff4444', '#44ff44', '#ffff44'])))
-                    fig.update_layout(title="Por Posição", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
+                    fig.update_layout(title="📍 Por Posição", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
                     st.plotly_chart(fig, use_container_width=True)
 
 def tela_grafico_temp():
@@ -394,8 +397,12 @@ def tela_grafico_temp():
 if 'usuario_nome' not in st.session_state:
     tela_login()
 else:
-    st.sidebar.title(st.session_state['usuario_nome'])
-    menu = st.sidebar.radio("Menu", ["🌡️ Temperatura", "⚠️ Não Conformidade", "📊 Gráfico Temp"])
+    # 👩🏻‍💻 Ícone adicionado ao nome do usuário
+    st.sidebar.title(f"👩🏻‍💻 {st.session_state['usuario_nome']}")
+    
+    # 🚚 e 📊 Ícones adicionados ao menu
+    menu = st.sidebar.radio("Menu", ["🌡️ Temperatura", "🚚 Não Conformidade", "📊 Gráfico Temp"])
+    
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
-    elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
+    elif menu == "🚚 Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
