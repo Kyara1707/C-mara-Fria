@@ -32,7 +32,7 @@ st.markdown("""
     }
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
         background-color: #ffffff !important; color: #000000 !important;
-        border-radius: 10px; border: 1px solid #479bd8;
+        border-radius: 10px; border: 1px solid #000000;
     }
     .stButton>button {
         background-color: #0054a6; color: white !important;
@@ -142,7 +142,7 @@ def salvar_nc(dados_dict):
 
 def tela_login():
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center;'>🧊 ColdSpec</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>👷🏻📊❄️ ColdSpec</h1>", unsafe_allow_html=True)
     st.markdown("---")
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -394,4 +394,5 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
+
 
