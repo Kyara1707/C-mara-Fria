@@ -8,7 +8,7 @@ import time
 # --- CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(
     page_title="ColdSpec | Qualidade",
-    page_icon="👷🏻📊❄️",
+    page_icon="👩🏻‍💻📊🚚📦🗺️",
     layout="centered"
 )
 
@@ -16,7 +16,7 @@ st.set_page_config(
 ARQUIVO_USUARIOS = "users.csv"
 ARQUIVO_DADOS_TEMP = "dados_temperatura.csv"
 ARQUIVO_DADOS_NC = "dados_nao_conformidade.csv"
-ARQUIVO_SKU = "sku (1).csv"
+ARQUIVO_SKU = "sku.csv"
 
 LIE = 2.0  # Limite Inferior Temperatura
 LSE = 7.0  # Limite Superior Temperatura
@@ -32,7 +32,7 @@ st.markdown("""
     }
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
         background-color: #ffffff !important; color: #000000 !important;
-        border-radius: 10px; border: 1px solid #000000;
+        border-radius: 10px; border: 1px solid #479bd8;
     }
     .stButton>button {
         background-color: #0054a6; color: white !important;
@@ -84,11 +84,11 @@ def carregar_historico_temp():
         return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";", on_bad_lines='skip', engine='python')
 
 def carregar_historico_nc():
-    # Esta função lê o arquivo central. Assim, todos veem os dados de todos.
     if not os.path.exists(ARQUIVO_DADOS_NC):
         return pd.DataFrame()
     try:
-        return pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
+        df = pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
+        return df
     except:
         try:
             return pd.read_csv(ARQUIVO_DADOS_NC, sep=";", on_bad_lines='skip', engine='python')
@@ -105,7 +105,6 @@ def salvar_temp(usuario, cargo, temp, status):
         nova_linha.to_csv(ARQUIVO_DADOS_TEMP, mode='a', header=not os.path.exists(ARQUIVO_DADOS_TEMP), index=False, sep=";")
     except PermissionError: st.error("Erro: Feche o arquivo Excel!")
 
-# --- FUNÇÃO DE SALVAR REESCRITA PARA GARANTIR PERSISTÊNCIA ---
 def salvar_nc(dados_dict):
     agora = datetime.now()
     dados_dict['Data'] = agora.strftime("%d/%m/%Y")
@@ -115,34 +114,29 @@ def salvar_nc(dados_dict):
     
     try:
         if os.path.exists(ARQUIVO_DADOS_NC):
-            # Lê o arquivo existente para garantir que não perderemos nada e alinhar colunas
             try:
                 df_antigo = pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
             except:
-                df_antigo = pd.DataFrame() # Se arquivo estiver corrompido, recomeça
+                df_antigo = pd.DataFrame()
             
-            # Concatena o antigo com o novo
             df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
-            
-            # Salva o arquivo completo novamente
             df_final.to_csv(ARQUIVO_DADOS_NC, index=False, sep=";")
         else:
-            # Se arquivo não existe, cria um novo com os dados
             df_novo.to_csv(ARQUIVO_DADOS_NC, index=False, sep=";")
             
         return True
     except PermissionError:
-        st.error("Erro de Permissão: Feche o arquivo 'dados_nao_conformidade.csv' se estiver aberto!")
+        st.error("Erro: Feche o arquivo de Não Conformidade (Excel)!")
         return False
     except Exception as e:
-        st.error(f"Erro desconhecido ao salvar: {e}")
+        st.error(f"Erro ao salvar: {e}")
         return False
 
 # --- TELAS ---
 
 def tela_login():
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center;'>👷🏻📊❄️ ColdSpec</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>👩🏻‍💻📊🚚📦🗺️ ColdSpec</h1>", unsafe_allow_html=True)
     st.markdown("---")
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -180,14 +174,13 @@ def tela_cadastro_temp():
 def tela_nao_conformidade():
     st.markdown("## ⚠️ Gestão de Não Conformidade")
     
-    # Abas
-    tab1, tab2 = st.tabs(["📝 Cadastrar NC", "📊 Dashboard Global"])
+    tab1, tab2 = st.tabs(["📝 Cadastrar NC", "📊 Dashboard"])
     
     # --- ABA 1: CADASTRO ---
     with tab1:
-        st.caption("Registre aqui a avaria. Ela ficará visível para todos no Dashboard.")
+        # ATENÇÃO: Adicionado KEY para poder limpar depois
         df_sku = carregar_sku()
-        codigo_input = st.text_input("Código do SKU:")
+        codigo_input = st.text_input("Código do SKU:", key="nc_sku") 
         material_nome = ""
         
         if df_sku is not None and not df_sku.empty and codigo_input:
@@ -204,26 +197,28 @@ def tela_nao_conformidade():
         
         with st.form("form_nc"):
             c_loc1, c_loc2 = st.columns(2)
-            arm_avaria = c_loc1.selectbox("Armazém:", ["Armazém A", "Armazém B", "Armazém C", "Armazém R", "Armazém M"])
-            rua_avaria = c_loc2.text_input("Rua / Corredor:", placeholder="Ex: 15B")
+            # Adicionado KEYS em todos os campos
+            arm_avaria = c_loc1.selectbox("Armazém:", ["Armazém A", "Armazém B", "Armazém C", "Armazém R", "Armazém M"], key="nc_arm")
+            rua_avaria = c_loc2.text_input("Rua / Corredor:", placeholder="Ex: 15B", key="nc_rua")
 
             st.write("**Posição:**")
-            local_avaria = st.radio("Selecione:", ["Topo", "Meio", "Base"], horizontal=True)
+            local_avaria = st.radio("Selecione:", ["Topo", "Meio", "Base"], horizontal=True, key="nc_loc")
             
             st.divider()
             st.write("**Avarias:**")
             c1, c2 = st.columns(2)
-            chk_quebra = c1.checkbox("Quebra de Garrafa")
-            chk_lata_am = c1.checkbox("Lata Amassada/Rasgada")
-            chk_filme = c1.checkbox("Filme Rasgado")
-            chk_sku = c1.checkbox("Falta de SKU")
-            chk_emb = c2.checkbox("Embalagem Avariada")
-            chk_pal_q = c2.checkbox("Palete Quebrado")
-            chk_pal_d = c2.checkbox("Palete Desalinhado")
-            chk_vazamento = c2.checkbox("Vazamento")
+            # Adicionado KEYS nos checkboxes
+            chk_quebra = c1.checkbox("Quebra de Garrafa", key="nc_chk1")
+            chk_lata_am = c1.checkbox("Lata Amassada/Rasgada", key="nc_chk2")
+            chk_filme = c1.checkbox("Filme Rasgado", key="nc_chk3")
+            chk_sku = c1.checkbox("Falta de SKU", key="nc_chk4")
+            chk_emb = c2.checkbox("Embalagem Avariada", key="nc_chk5")
+            chk_pal_q = c2.checkbox("Palete Quebrado", key="nc_chk6")
+            chk_pal_d = c2.checkbox("Palete Desalinhado", key="nc_chk7")
+            chk_vazamento = c2.checkbox("Vazamento", key="nc_chk8")
             
             st.divider()
-            obs = st.text_area("Observações:")
+            obs = st.text_area("Observações:", key="nc_obs")
             
             if st.form_submit_button("SALVAR REGISTRO"):
                 if codigo_input:
@@ -242,43 +237,51 @@ def tela_nao_conformidade():
                         "Vazamento": "Sim" if chk_vazamento else "Não"
                     }
                     if salvar_nc(dados):
-                        st.success("✅ Salvo com sucesso! Atualizando dashboard...")
-                        time.sleep(1.5) # Tempo para ler
+                        st.success("✅ Salvo com sucesso! Limpando formulário...")
+                        
+                        # --- LIMPEZA MANUAL DOS CAMPOS ---
+                        # Para limpar inputs no Streamlit ao dar rerun, alteramos o Session State
+                        st.session_state["nc_sku"] = ""
+                        st.session_state["nc_rua"] = ""
+                        st.session_state["nc_obs"] = ""
+                        
+                        # Resetar checkboxes
+                        for i in range(1, 9):
+                            st.session_state[f"nc_chk{i}"] = False
+                            
+                        time.sleep(1)
                         st.rerun()
                 else: st.warning("⚠️ Digite o SKU.")
 
-    # --- ABA 2: DASHBOARD GLOBAL ---
+    # --- ABA 2: DASHBOARD ---
     with tab2:
         df_nc = carregar_historico_nc()
         
         if df_nc.empty:
-            st.info("Ainda não há avarias registradas no sistema.")
+            st.info("Sem dados registrados.")
         else:
-            # Botão Download
             csv_data = df_nc.to_csv(index=False, sep=";").encode('utf-8')
-            st.download_button("📥 Baixar Relatório Geral (CSV)", data=csv_data, file_name="avarias_geral.csv", mime="text/csv")
+            st.download_button("📥 Baixar CSV", data=csv_data, file_name="avarias.csv", mime="text/csv")
             
             st.markdown("---")
-            st.metric("Total Global de Ocorrências", len(df_nc))
+            st.metric("Total de Ocorrências", len(df_nc))
             
-            # --- LÓGICA DE GRÁFICOS ---
             colunas_avarias = ["Quebra_Garrafa", "Lata_Amassada", "Filme_Rasgado", "Falta_SKU", 
                                "Emb_Avariada", "Palete_Quebrado", "Palete_Desalinhado", "Vazamento"]
             
             contagem_avarias = {}
             for col in colunas_avarias:
                 if col in df_nc.columns:
-                    # Conta "Sim", limpando espaços extras
                     qtd = df_nc[df_nc[col].astype(str).str.strip() == 'Sim'].shape[0]
                     if qtd > 0:
                         contagem_avarias[col.replace('_', ' ')] = qtd
             
             if contagem_avarias:
                 fig_donut = go.Figure(data=[go.Pie(labels=list(contagem_avarias.keys()), values=list(contagem_avarias.values()), hole=.4)])
-                fig_donut.update_layout(title="Tipos de Avaria (Global)", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
+                fig_donut.update_layout(title="Tipos de Avaria", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
                 st.plotly_chart(fig_donut, use_container_width=True)
             else:
-                st.warning("Dados existem, mas nenhuma avaria específica foi marcada como 'Sim'.")
+                st.warning("Nenhuma avaria marcada como 'Sim' encontrada.")
 
             c1, c2 = st.columns(2)
             with c1:
@@ -294,9 +297,6 @@ def tela_nao_conformidade():
                     fig = go.Figure(go.Bar(x=counts.index, y=counts.values, marker=dict(color=['#ff4444', '#44ff44', '#ffff44'])))
                     fig.update_layout(title="Por Posição", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
                     st.plotly_chart(fig, use_container_width=True)
-            
-            with st.expander("Ver Tabela Completa"):
-                st.dataframe(df_nc, use_container_width=True)
 
 def tela_grafico_temp():
     st.markdown("## 📊 Controle de Temperatura")
@@ -394,5 +394,3 @@ else:
     if menu == "🌡️ Temperatura": tela_cadastro_temp()
     elif menu == "⚠️ Não Conformidade": tela_nao_conformidade()
     else: tela_grafico_temp()
-
-
