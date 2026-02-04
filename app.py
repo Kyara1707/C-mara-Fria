@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 import time
+import shutil
 
 # --- CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(
@@ -17,6 +18,7 @@ ARQUIVO_USUARIOS = "users.csv"
 ARQUIVO_DADOS_TEMP = "dados_temperatura.csv"
 ARQUIVO_DADOS_NC = "dados_nao_conformidade.csv"
 ARQUIVO_SKU = "sku (1).csv"
+PASTA_HISTORICO = "historico_uploads"
 
 LIE = 2.0
 LSE = 7.0
@@ -56,7 +58,30 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE DADOS ---
+# --- FUNÇÕES DE ARQUIVO E DADOS ---
+
+def gerenciar_pasta_historico():
+    """Cria a pasta se não existir e remove arquivos com mais de 15 dias."""
+    if not os.path.exists(PASTA_HISTORICO):
+        os.makedirs(PASTA_HISTORICO)
+    
+    agora = time.time()
+    limite_dias = 15 * 86400  # 15 dias em segundos
+
+    for f in os.listdir(PASTA_HISTORICO):
+        caminho_arquivo = os.path.join(PASTA_HISTORICO, f)
+        if os.path.isfile(caminho_arquivo):
+            # Se a data de modificação for mais antiga que o limite, apaga
+            if os.stat(caminho_arquivo).st_mtime < (agora - limite_dias):
+                os.remove(caminho_arquivo)
+
+def salvar_arquivo_historico(uploaded_file):
+    """Salva o arquivo enviado na pasta de histórico."""
+    gerenciar_pasta_historico()
+    caminho = os.path.join(PASTA_HISTORICO, uploaded_file.name)
+    with open(caminho, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    return caminho
 
 def carregar_usuarios():
     if not os.path.exists(ARQUIVO_USUARIOS): return None
@@ -83,15 +108,20 @@ def carregar_historico_temp():
     except:
         return pd.read_csv(ARQUIVO_DADOS_TEMP, sep=";", on_bad_lines='skip', engine='python')
 
-def carregar_historico_nc():
-    if not os.path.exists(ARQUIVO_DADOS_NC):
+def carregar_historico_nc(caminho_arquivo=None):
+    """Carrega o histórico interno ou um arquivo específico se passado o caminho."""
+    arquivo_alvo = caminho_arquivo if caminho_arquivo else ARQUIVO_DADOS_NC
+    
+    if not os.path.exists(arquivo_alvo):
         return pd.DataFrame()
     try:
-        df = pd.read_csv(ARQUIVO_DADOS_NC, sep=";")
+        # Tenta ler com utf-8 primeiro
+        df = pd.read_csv(arquivo_alvo, sep=";", encoding='utf-8')
         return df
     except:
         try:
-            return pd.read_csv(ARQUIVO_DADOS_NC, sep=";", on_bad_lines='skip', engine='python')
+            # Tenta latin1 se falhar
+            return pd.read_csv(arquivo_alvo, sep=";", encoding='latin1', on_bad_lines='skip', engine='python')
         except:
             return pd.DataFrame()
 
@@ -108,7 +138,6 @@ def salvar_temp(usuario, cargo, temp, status):
 def salvar_nc(dados_dict):
     agora = datetime.now()
     dados_dict['Data'] = agora.strftime("%d/%m/%Y")
-    dados_dict['Horario'] = agora.strftime("%H:%M:%S")
     
     df_novo = pd.DataFrame([dados_dict])
     
@@ -159,10 +188,8 @@ def tela_login():
 def tela_cadastro_temp():
     st.markdown("## 🌡️ Monitoramento de Temperatura")
     
-    # CRIAMOS DUAS ABAS: Uma para registrar, outra para ver o histórico
     tab1, tab2 = st.tabs(["📝 Nova Leitura", "📊 Histórico Geral"])
 
-    # --- ABA 1: REGISTRO ---
     with tab1:
         st.markdown(f"**Faixa:** <span style='color:#479bd8'>{LIE}ºC</span> a <span style='color:#479bd8'>{LSE}ºC</span>", unsafe_allow_html=True)
         st.write("") 
@@ -174,39 +201,34 @@ def tela_cadastro_temp():
             if status == "OK":
                 st.markdown(f"""<div class="alert-box-green"><p>✅ SUCESSO</p><p>{temp_input}ºC registrada.</p></div>""", unsafe_allow_html=True)
                 st.balloons()
-                time.sleep(1) # Pequena pausa para ver a mensagem
-                st.rerun()    # Recarrega para atualizar o histórico na outra aba
+                time.sleep(1)
+                st.rerun()    
             else:
                 st.markdown(f"""<div class="alert-box-red"><p>🚨 FORA DA FAIXA!</p><p>{temp_input}ºC</p></div>""", unsafe_allow_html=True)
                 time.sleep(1)
                 st.rerun()
 
-    # --- ABA 2: HISTÓRICO VISUAL (GLOBAL) ---
     with tab2:
         df = carregar_historico_temp()
         
         if df.empty:
             st.info("Nenhum registro encontrado.")
         else:
-            # Ordenar do mais recente para o mais antigo (se possível)
             if 'Data' in df.columns and 'Horario' in df.columns:
                 try:
                     df['Datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Horario'], dayfirst=True, errors='coerce')
                     df = df.sort_values(by='Datetime', ascending=False).drop(columns=['Datetime'])
                 except:
-                    pass # Se falhar, mostra como está
+                    pass 
 
-            # Botão de Download
             csv_data = df.to_csv(index=False, sep=";").encode('utf-8')
             st.download_button("📥 Baixar Histórico Completo", data=csv_data, file_name="historico_temperatura.csv", mime="text/csv")
             
             st.markdown("---")
             
-            # Métricas rápidas
             col_met1, col_met2, col_met3 = st.columns(3)
             col_met1.metric("Total de Leituras", len(df))
             
-            # Última temperatura
             ultima_temp = df.iloc[0]['Temperatura'] if not df.empty else 0
             delta_temp = None
             if len(df) > 1:
@@ -217,7 +239,6 @@ def tela_cadastro_temp():
 
             col_met2.metric("Última Temp.", f"{ultima_temp}ºC", delta=delta_temp)
             
-            # Contagem de Erros
             erros = df[df['Status'] == 'ERRO'].shape[0]
             col_met3.metric("Desvios (ERRO)", erros, delta_color="inverse")
             
@@ -229,6 +250,12 @@ def tela_cadastro_temp():
 def tela_nao_conformidade():
     st.markdown("## 🚚 Gestão de Avarias (NC)")
     
+    # Inicializa variáveis de sessão para controle do arquivo visualizado
+    if 'nc_arquivo_atual' not in st.session_state:
+        st.session_state['nc_arquivo_atual'] = "Dados Atuais (Registros do Dia/Interno)"
+    if 'nc_caminho_arquivo' not in st.session_state:
+        st.session_state['nc_caminho_arquivo'] = None
+
     # Lógica de limpar o form (no topo)
     if st.session_state.get('limpar_nc_sucesso'):
         st.session_state['nc_sku'] = ""
@@ -241,7 +268,7 @@ def tela_nao_conformidade():
         st.session_state['limpar_nc_sucesso'] = False
         st.success("✅ Registro salvo e formulário limpo!")
 
-    tab1, tab2 = st.tabs(["📦 Registrar NC", "📊 Dashboard"])
+    tab1, tab2, tab3 = st.tabs(["📦 Registrar NC", "📊 Dashboard", "🗂️ Histórico & Upload"])
     
     # --- ABA 1: CADASTRO ---
     with tab1:
@@ -309,14 +336,24 @@ def tela_nao_conformidade():
 
     # --- ABA 2: DASHBOARD ---
     with tab2:
-        df_nc = carregar_historico_nc()
+        st.markdown(f"**Visualizando:** `{st.session_state['nc_arquivo_atual']}`")
+        if st.button("🔄 Voltar para Dados Atuais (Ao Vivo)", key="btn_reset_dash"):
+            st.session_state['nc_arquivo_atual'] = "Dados Atuais"
+            st.session_state['nc_caminho_arquivo'] = None
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # Carrega dados baseados na seleção do histórico
+        df_nc = carregar_historico_nc(st.session_state['nc_caminho_arquivo'])
+
         if df_nc.empty:
-            st.info("Sem dados registrados.")
+            st.info("Sem dados para exibir no arquivo selecionado.")
         else:
+            # Opção de baixar o que está sendo visualizado
             csv_data = df_nc.to_csv(index=False, sep=";").encode('utf-8')
-            st.download_button("📥 Baixar CSV", data=csv_data, file_name="avarias.csv", mime="text/csv")
+            st.download_button("📥 Baixar CSV Visualizado", data=csv_data, file_name="relatorio_nc.csv", mime="text/csv")
             
-            st.markdown("---")
             st.metric("📦 Total de Ocorrências", len(df_nc))
             
             colunas_avarias = ["Quebra_Garrafa", "Lata_Amassada", "Filme_Rasgado", "Falta_SKU", 
@@ -325,7 +362,8 @@ def tela_nao_conformidade():
             contagem_avarias = {}
             for col in colunas_avarias:
                 if col in df_nc.columns:
-                    qtd = df_nc[df_nc[col].astype(str).str.strip() == 'Sim'].shape[0]
+                    # Conta "Sim", ignorando maiúsculas/minúsculas e espaços
+                    qtd = df_nc[df_nc[col].astype(str).str.strip().str.lower() == 'sim'].shape[0]
                     if qtd > 0:
                         contagem_avarias[col.replace('_', ' ')] = qtd
             
@@ -350,6 +388,44 @@ def tela_nao_conformidade():
                     fig = go.Figure(go.Bar(x=counts.index, y=counts.values, marker=dict(color=['#ff4444', '#44ff44', '#ffff44'])))
                     fig.update_layout(title="📍 Por Posição", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#f0f0f0"))
                     st.plotly_chart(fig, use_container_width=True)
+
+            with st.expander("Ver Dados Brutos"):
+                st.dataframe(df_nc, use_container_width=True)
+
+    # --- ABA 3: HISTÓRICO E UPLOAD ---
+    with tab3:
+        st.markdown("### 📤 Upload de Arquivo CSV")
+        st.markdown("Suba um arquivo de avarias (`.csv` separado por ponto-e-vírgula) para analisar no dashboard.")
+        
+        uploaded_nc = st.file_uploader("Selecionar Arquivo", type=['csv'], key="upload_nc_externo")
+        
+        if uploaded_nc is not None:
+            caminho_salvo = salvar_arquivo_historico(uploaded_nc)
+            st.success(f"Arquivo salvo em histórico: {uploaded_nc.name}")
+            time.sleep(1)
+            st.rerun()
+
+        st.divider()
+        st.markdown("### 🗂️ Arquivos Salvos (Últimos 15 dias)")
+        
+        gerenciar_pasta_historico() # Limpa antigos antes de listar
+        arquivos = [f for f in os.listdir(PASTA_HISTORICO) if f.endswith('.csv')]
+        
+        if arquivos:
+            # Ordenar por data de modificação (mais recente primeiro)
+            arquivos.sort(key=lambda x: os.path.getmtime(os.path.join(PASTA_HISTORICO, x)), reverse=True)
+            
+            for arq in arquivos:
+                col_f1, col_f2 = st.columns([3, 1])
+                col_f1.text(f"📄 {arq}")
+                if col_f2.button("VISUALIZAR", key=f"btn_view_{arq}"):
+                    st.session_state['nc_arquivo_atual'] = arq
+                    st.session_state['nc_caminho_arquivo'] = os.path.join(PASTA_HISTORICO, arq)
+                    # Muda para a aba de dashboard (hack visual ou apenas aviso)
+                    st.success(f"Carregado! Vá para a aba 'Dashboard' para ver os gráficos de: {arq}")
+        else:
+            st.info("Nenhum arquivo no histórico recente.")
+
 
 def tela_grafico_temp():
     st.markdown("## 📊 Análise Gráfica")
