@@ -307,7 +307,7 @@ def tela_nao_conformidade():
             chk_pal_q = c2.checkbox("Palete Quebrado", key="nc_chk6")
             chk_pal_d = c2.checkbox("Palete Desalinhado", key="nc_chk7")
             chk_vazamento = c2.checkbox("Vazamento", key="nc_chk8")
-            chk_pal_m = c2.checkbox("Palete molhado", key="nc_chk9")
+            chk_pal_m = c2.checkbox("Palete Molhado", key="nc_chk9")
 
             st.divider()
             obs = st.text_area("📝 Observações:", key="nc_obs")
@@ -360,7 +360,7 @@ def tela_nao_conformidade():
             st.metric("📦 Total de Ocorrências", len(df_nc))
             
             colunas_avarias = ["Quebra_Garrafa", "Lata_Amassada", "Filme_Rasgado", "Falta_SKU", 
-                               "Emb_Avariada", "Palete_Quebrado", "Palete_Desalinhado", "Vazamento"]
+                               "Emb_Avariada", "Palete_Quebrado", "Palete_Desalinhado", "Vazamento", "Palete_Molhado"]
             
             contagem_avarias = {}
             for col in colunas_avarias:
