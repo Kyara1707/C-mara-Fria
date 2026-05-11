@@ -307,7 +307,8 @@ def tela_nao_conformidade():
             chk_pal_q = c2.checkbox("Palete Quebrado", key="nc_chk6")
             chk_pal_d = c2.checkbox("Palete Desalinhado", key="nc_chk7")
             chk_vazamento = c2.checkbox("Vazamento", key="nc_chk8")
-            
+            chk_pal_m = c2.checkbox("Palete molhado", key="nc_chk9")
+
             st.divider()
             obs = st.text_area("📝 Observações:", key="nc_obs")
             
@@ -328,6 +329,8 @@ def tela_nao_conformidade():
                         "Palete_Quebrado": "Sim" if chk_pal_q else "Não",
                         "Palete_Desalinhado": "Sim" if chk_pal_d else "Não",
                         "Vazamento": "Sim" if chk_vazamento else "Não"
+                        "Palete_Molhado": "Sim" if chk_pal_m else "Não",
+              
                     }
                     if salvar_nc(dados):
                         st.session_state['limpar_nc_sucesso'] = True
