@@ -328,8 +328,8 @@ def tela_nao_conformidade():
                         "Emb_Avariada": "Sim" if chk_emb else "Não",
                         "Palete_Quebrado": "Sim" if chk_pal_q else "Não",
                         "Palete_Desalinhado": "Sim" if chk_pal_d else "Não",
-                        "Vazamento": "Sim" if chk_vazamento else "Não"
-                        "Palete_Molhado": "Sim" if chk_pal_m else "Não",
+                        "Vazamento": "Sim" if chk_vazamento else "Não",
+                        "Palete_Molhado": "Sim" if chk_pal_m else "Não"
               
                     }
                     if salvar_nc(dados):
